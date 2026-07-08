@@ -23,19 +23,21 @@ ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # --- vendored offline instrumentation toolchain -----------------------------
-# dex2jar: prebuilt lib/ + d2j-*.sh launchers (ready to run, no build needed) + true source (small,
-# excludes the ~1GB of stale decompiled-APK working dirs that were sitting alongside it upstream).
+# dex2jar (prebuilt lib/ + d2j-*.sh launchers, ready to run) and blameMasterInstrument-android.jar
+# (built from bm_instrument's `android` branch — has CommandLine.class, see ANDROID_README.md) are
+# both .gitignore'd (see ../DATA.md) and fetched by ../fetch_data.sh before `docker build` runs —
+# these COPYs fail with a clear "not found" error if you skip that step.
 COPY dex2jar /opt/dex2jar
-COPY dex2jar-src /opt/dex2jar-src
-
-# blameMasterInstrument, built from bm_instrument's `android` branch (bm_instrument8/target's
-# prebuilt jar already includes CommandLine.class — see ANDROID_README.md) + full source + the
-# offline Maven cache, so it can be rebuilt without hitting Maven Central.
 COPY blameMasterInstrument-android.jar /opt/blameMasterInstrument-android.jar
-COPY bm_instrument-android-src /opt/bm_instrument-android-src
 
-# Native agent source (ARTTI_instrument's JVMTI live-breakpoint agent — see ANDROID_README.md for
-# why this, not a literal "agent_element.cpp", is what's vendored) + a generic prebuilt fallback.
+# Neither tool's *source* is copied into the image — both are archived as full-history git bundles
+# instead (../fetch_data.sh --source: dex2jar.bundle, bm_instrument.bundle — same bundle the
+# server-side image uses, just `git checkout android` for the branch with CommandLine.java).
+
+# Native agent: agent.cpp/Makefile/generate_agent.py/example.btm are small text, tracked directly
+# in git; libagent.so.prebuilt-generic is .gitignore'd and fetched by fetch_data.sh into this same
+# directory before build (see ANDROID_README.md for why this, not a literal "agent_element.cpp",
+# is what's vendored).
 COPY agent-src /opt/agent-src
 
 COPY lib /opt/lib

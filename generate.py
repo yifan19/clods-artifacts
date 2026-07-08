@@ -51,10 +51,17 @@ def needed_tarballs(bug):
 def ensure_symlink(tarball):
     src = os.path.join(SOURCE_BINARIES, tarball)
     dst = os.path.join(BINARIES_DIR, tarball)
-    if os.path.exists(dst) or os.path.islink(dst):
+    if os.path.islink(dst):
+        # A plain symlink here would carry the absolute host path (SOURCE_BINARIES) into
+        # docker-compose's `../binaries:/binaries:ro` bind mount, where that target doesn't
+        # exist (only final_artifact/binaries itself is mounted) — every tarball then reads as
+        # missing inside the containers. A hard link is a real directory entry for the same
+        # inode, so it works no matter what's mounted, with no extra disk usage.
+        os.remove(dst)
+    if os.path.exists(dst):
         return os.path.exists(src)
     if os.path.exists(src):
-        os.symlink(src, dst)
+        os.link(src, dst)
         return True
     return False
 
@@ -150,20 +157,20 @@ docker compose build
 docker compose up -d
 
 echo "== waiting for slaves over ssh =="
-docker compose exec -T master /opt/lib/wait_for_ssh.sh
+docker compose exec -T --user ubuntu master /opt/lib/wait_for_ssh.sh
 
 echo "== preparing every node (extract vendored tarballs + render config) =="
-docker compose exec -T master /opt/lib/cluster_ctl.sh prepare
+docker compose exec -T --user ubuntu master /opt/lib/cluster_ctl.sh prepare
 
 echo "== formatting + starting the cluster =="
-docker compose exec -T master /opt/lib/cluster_ctl.sh format
-docker compose exec -T master /opt/lib/cluster_ctl.sh start
+docker compose exec -T --user ubuntu master /opt/lib/cluster_ctl.sh format
+docker compose exec -T --user ubuntu master /opt/lib/cluster_ctl.sh start
 
 echo "== running baseline + rounds [{rounds}] =="
-docker compose exec -T master /opt/lib/run_workload.sh
+docker compose exec -T --user ubuntu master /opt/lib/run_workload.sh
 
 echo "== stopping cluster daemons =="
-docker compose exec -T master /opt/lib/cluster_ctl.sh stop || true
+docker compose exec -T --user ubuntu master /opt/lib/cluster_ctl.sh stop || true
 
 if [ "${{1:-}}" != "--keep" ]; then
     docker compose down

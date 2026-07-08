@@ -11,8 +11,12 @@ ROUNDS ENABLE_YARN MASTER_HOST SLAVE_HOSTS ZK_MYID DFS_REPLICATION RESULTS_DIR J
 
 : > /home/ubuntu/.ssh/environment
 for var in $ENV_WHITELIST; do
+    # Always write the var, even empty — bugs that don't use e.g. Zookeeper/Cassandra leave that
+    # NAME var as "" in docker-compose's environment:, which `docker compose exec` on master sees
+    # as set-but-empty. A fresh `ssh slaveN` login only gets what's in this file, so skipping empty
+    # values here would leave the var fully unset there, tripping node_prepare.sh's `set -u`.
     val="${!var:-}"
-    [ -n "$val" ] && echo "${var}=${val}" >> /home/ubuntu/.ssh/environment
+    echo "${var}=${val}" >> /home/ubuntu/.ssh/environment
 done
 chown ubuntu:ubuntu /home/ubuntu/.ssh/environment
 chmod 600 /home/ubuntu/.ssh/environment

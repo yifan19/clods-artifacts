@@ -45,13 +45,14 @@ substitute.
 ## Quick start
 
 ```bash
-cd final_artifact/element-516        # or any other element-<bug>
+cd final_artifact && ./fetch_data.sh   # once, after cloning — pulls APKs/jars/dex2jar from S3
+cd element-516                          # or any other element-<bug>
 ./run_experiment.sh
 ```
 
-No missing binaries block any of the 5 bugs — every bug's own pre-built APK is already vendored
-(symlinked from `bm_instrument/element-bugs/<bug>/results/`), and `android-common/` vendors
-everything else needed for the offline patching step.
+No missing binaries block any of the 5 bugs — every bug's own pre-built APK is vendored (on S3,
+see `../DATA.md`; in this checkout, symlinked from `bm_instrument/element-bugs/<bug>/results/`),
+and `android-common/` vendors everything else needed for the offline patching step.
 
 ## What's vendored where
 

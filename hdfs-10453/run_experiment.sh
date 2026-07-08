@@ -29,20 +29,20 @@ docker compose build
 docker compose up -d
 
 echo "== waiting for slaves over ssh =="
-docker compose exec -T master /opt/lib/wait_for_ssh.sh
+docker compose exec -T --user ubuntu master /opt/lib/wait_for_ssh.sh
 
 echo "== preparing every node (extract vendored tarballs + render config) =="
-docker compose exec -T master /opt/lib/cluster_ctl.sh prepare
+docker compose exec -T --user ubuntu master /opt/lib/cluster_ctl.sh prepare
 
 echo "== formatting + starting the cluster =="
-docker compose exec -T master /opt/lib/cluster_ctl.sh format
-docker compose exec -T master /opt/lib/cluster_ctl.sh start
+docker compose exec -T --user ubuntu master /opt/lib/cluster_ctl.sh format
+docker compose exec -T --user ubuntu master /opt/lib/cluster_ctl.sh start
 
 echo "== running baseline + rounds [1 2 3 4] =="
-docker compose exec -T master /opt/lib/run_workload.sh
+docker compose exec -T --user ubuntu master /opt/lib/run_workload.sh
 
 echo "== stopping cluster daemons =="
-docker compose exec -T master /opt/lib/cluster_ctl.sh stop || true
+docker compose exec -T --user ubuntu master /opt/lib/cluster_ctl.sh stop || true
 
 if [ "${1:-}" != "--keep" ]; then
     docker compose down

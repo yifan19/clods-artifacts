@@ -57,6 +57,18 @@ final_artifact/
 from) get a stub `README.md` explaining why they aren't packaged, instead of being silently
 omitted.
 
+## This repo is git-controlled; the data isn't
+
+`final_artifact/` is a git repo tracking scripts, Dockerfiles, docs, and instrumentation plans
+only. Vendored binaries, historical `experimental_results/`, Android APKs, prebuilt jars, and the
+offline Maven cache are `.gitignore`d and live in S3 instead — see `DATA.md` for the full layout
+and why. **Fetch them once after cloning:**
+
+```bash
+git clone <this-repo> && cd final_artifact
+./fetch_data.sh          # pulls everything from s3://clods-artifacts/final_artifact-data/
+```
+
 ## Quick start
 
 ```bash

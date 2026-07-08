@@ -64,13 +64,18 @@ RUN sed -i 's/#\?PermitUserEnvironment.*/PermitUserEnvironment yes/' /etc/ssh/ss
     || echo 'PermitUserEnvironment yes' >> /etc/ssh/sshd_config
 
 # --- vendored instrumentation tool + Maven offline cache --------------------
-# blameMasterInstrument.jar is the already-built uber jar (see ../../bm_instrument/target/) —
-# no build needed to run an experiment. bm_instrument-src/ + m2-repo/ are included so an evaluator
-# who wants to modify the tool and rebuild it can do so fully offline:
-#   cd /opt/bm_instrument-src && mvn -o -Dmaven.repo.local=/opt/m2-repo package -DskipTests
+# blameMasterInstrument.jar is a prebuilt fallback jar. bm_instrument-src/ + m2-repo/ are also
+# vendored (both fetched by ../fetch_data.sh — bm_instrument-src/ from source-bundles/
+# bm_instrument.bundle, see ../DATA.md — before `docker build` runs), and this image actually
+# builds from that source at image-build time (`mvn -o`, fully offline against m2-repo/) rather
+# than only trusting the prebuilt jar, per this artifact's "keep source available and try to build
+# it" goal. The freshly-built jar lives at bm_instrument-src/target/uber-blameMasterInstrument-1.0.jar
+# inside the image; blameMasterInstrument.jar is kept alongside as a known-good fallback in case a
+# future source change breaks the build.
 COPY blameMasterInstrument.jar /opt/blameMasterInstrument.jar
 COPY bm_instrument-src /opt/bm_instrument-src
 COPY m2-repo /opt/m2-repo
+RUN cd /opt/bm_instrument-src && mvn -o -Dmaven.repo.local=/opt/m2-repo package -DskipTests
 
 COPY lib /opt/lib
 COPY entrypoint.sh /opt/entrypoint.sh

@@ -42,6 +42,8 @@ RUN useradd -m -s /bin/bash ubuntu \
     && echo "ubuntu ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
     && mkdir -p /var/run/sshd
 
+
+
 USER ubuntu
 WORKDIR /home/ubuntu
 RUN mkdir -p ~/.ssh \
@@ -52,6 +54,11 @@ RUN mkdir -p ~/.ssh \
     && chmod 600 ~/.ssh/config
 
 USER root
+
+
+RUN mkdir -p /data
+RUN chown ubuntu:ubuntu  /data
+
 
 # Let SSH sessions on this container see the same bug-specific env vars (HADOOP_NAME, etc.) that
 # docker-compose set on the container itself. Compose's `environment:` only reaches PID 1 and its

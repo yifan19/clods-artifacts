@@ -115,7 +115,8 @@ def main():
         if not os.path.isdir(hbase_dir):
             sys.exit("expected %s to exist" % hbase_dir)
         hbase_conf = os.path.join(hbase_dir, "conf")
-        zk_quorum = ",".join(slaves) if (zookeeper_name and slaves) else master
+        has_standalone_zk = bool(zookeeper_name and slaves)
+        zk_quorum = ",".join(slaves) if has_standalone_zk else master
         write(os.path.join(hbase_conf, "hbase-site.xml"), xml_props([
             ("hbase.rootdir", "hdfs://%s:9000/hbase" % master),
             ("hbase.cluster.distributed", "true"),
@@ -124,8 +125,14 @@ def main():
         ]))
         write(os.path.join(hbase_conf, "regionservers"), "\n".join(slaves) + "\n")
         with open(os.path.join(hbase_conf, "hbase-env.sh"), "a") as f:
-            f.write("\nexport JAVA_HOME=%s\nexport HBASE_MANAGES_ZK=false\n" %
-                    os.environ.get("JAVA_HOME", "/usr/lib/jvm/java-8-openjdk-amd64"))
+            # Bugs with their own standalone ZK ensemble (has_standalone_zk) manage it themselves
+            # via cluster_ctl.sh's zkServer.sh calls, so HBase must NOT also try to run one — hence
+            # false there. Bugs with no separate ZK service (zk_quorum falls back to master) have
+            # nothing else to provide one, so HBase must manage its own embedded ZK (true) or
+            # HMaster crashes on startup with "Connection refused" to master:2181.
+            f.write("\nexport JAVA_HOME=%s\nexport HBASE_MANAGES_ZK=%s\n" %
+                    (os.environ.get("JAVA_HOME", "/usr/lib/jvm/java-8-openjdk-amd64"),
+                     "false" if has_standalone_zk else "true"))
 
     # --- ZooKeeper (rendered on nodes that actually run a ZK server) -----
     if zookeeper_name and "ZK_MYID" in os.environ:

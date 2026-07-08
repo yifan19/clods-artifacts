@@ -11,12 +11,16 @@ ROUNDS ENABLE_YARN MASTER_HOST SLAVE_HOSTS ZK_MYID DFS_REPLICATION RESULTS_DIR J
 
 : > /home/ubuntu/.ssh/environment
 for var in $ENV_WHITELIST; do
-    # Always write the var, even empty — bugs that don't use e.g. Zookeeper/Cassandra leave that
-    # NAME var as "" in docker-compose's environment:, which `docker compose exec` on master sees
-    # as set-but-empty. A fresh `ssh slaveN` login only gets what's in this file, so skipping empty
-    # values here would leave the var fully unset there, tripping node_prepare.sh's `set -u`.
-    val="${!var:-}"
-    echo "${var}=${val}" >> /home/ubuntu/.ssh/environment
+    # Forward the var whenever docker-compose set it, even to "" — bugs that don't use e.g.
+    # Zookeeper/Cassandra leave that NAME var as "" in environment:, which `docker compose exec`
+    # on master sees as set-but-empty; a fresh `ssh slaveN` login only gets what's in this file, so
+    # dropping empty values here left the var fully unset there, tripping node_prepare.sh's
+    # `set -u`. But some whitelisted vars (e.g. DFS_REPLICATION) are never set by any bug's
+    # docker-compose.yml at all, and their consumers rely on that true absence to fall back to a
+    # computed default — so presence (${!var+x}), not non-emptiness, is the right test here.
+    if [ -n "${!var+x}" ]; then
+        echo "${var}=${!var}" >> /home/ubuntu/.ssh/environment
+    fi
 done
 chown ubuntu:ubuntu /home/ubuntu/.ssh/environment
 chmod 600 /home/ubuntu/.ssh/environment

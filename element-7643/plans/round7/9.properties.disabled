@@ -1,0 +1,8 @@
+ID=9
+variableName=Foo
+className=org.matrix.android.sdk.internal.database.model.TimelineEventEntity
+methodName=isMoreRecentThan
+parameterTypes=org.matrix.android.sdk.internal.database.model.TimelineEventEntity
+lineNumber=4294967295
+byteCodeIndex=None
+

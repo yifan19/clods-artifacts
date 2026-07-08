@@ -1,0 +1,8 @@
+ID=5
+strategy=before
+className=org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights
+methodName=ResourceWeights
+parameterTypes=float
+lineNumber=314
+byteCodeIndex=86
+variableName=foo

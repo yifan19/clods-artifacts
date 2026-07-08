@@ -1,0 +1,37 @@
+# Large / binary data artifacts — fetched from S3 by ./fetch_data.sh, not tracked in git.
+# See DATA.md for exactly what lives where and how to pull it.
+
+# vendored software tarballs (Hadoop/HBase/ZooKeeper/Cassandra/YCSB/HiBench — multi-hundred-MB each)
+/binaries/*
+!/binaries/.gitkeep
+
+# real historical run output copied in per bug (up to a few hundred MB per bug)
+*/experimental_results/
+
+# fresh-run output (empty until you run a bug; never worth tracking)
+*/results/
+
+# Android APKs (symlinked from bm_instrument/element-bugs/*/results/, ~70-90MB each)
+element-*/apk/*
+!element-*/apk/.gitkeep
+
+# prebuilt jars / offline Maven cache for the instrumentation tool
+/common/blameMasterInstrument.jar
+/common/m2-repo/
+/android-common/blameMasterInstrument-android.jar
+
+# flat source-code copies that have a real git repo behind them — archived as `git bundle`s
+# instead (full history preserved), see DATA.md "Vendored source repos"
+/common/bm_instrument-src/
+/android-common/bm_instrument-android-src/
+/android-common/dex2jar-src/
+
+# prebuilt dex2jar tool (ready-to-run jars) + the one prebuilt native-agent binary
+/android-common/dex2jar/
+/android-common/agent-src/libagent.so.prebuilt-generic
+
+# local generator caches / editor junk
+__pycache__/
+*.pyc
+*.swp
+.DS_Store

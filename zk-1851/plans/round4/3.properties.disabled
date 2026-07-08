@@ -1,0 +1,7 @@
+ID=3
+className=org.apache.zookeeper.server.quorum.CommitProcessor
+methodName=run
+lineNumber=171
+byteCodeIndex=104
+variableName=foo
+parameterTypes=

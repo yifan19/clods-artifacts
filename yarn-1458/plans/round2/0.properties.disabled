@@ -1,0 +1,8 @@
+ID=0
+strategy=before
+className=org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.ComputeFairShares
+methodName=computeShare
+parameterTypes=org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.Schedulable,double,org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceType
+lineNumber=208
+byteCodeIndex=54
+variableName=foo

@@ -1,0 +1,8 @@
+ID=5
+className=org.apache.hadoop.util.LightWeightGSet
+methodName=LightWeightGSet
+parameterTypes=int
+lineNumber=ENTRY
+byteCodeIndex=-1
+variableName=key
+strategy=before

@@ -1,0 +1,8 @@
+ID=2
+strategy=beforeReturn
+className=org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSAppAttempt
+methodName=getWeights
+parameterTypes=
+lineNumber=699
+byteCodeIndex=8
+variableName=foo

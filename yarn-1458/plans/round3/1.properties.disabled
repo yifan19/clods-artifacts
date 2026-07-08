@@ -1,0 +1,8 @@
+ID=1
+strategy=beforeReturn
+className=org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSQueue
+methodName=getWeights
+parameterTypes=
+lineNumber=96
+byteCodeIndex=14
+variableName=foo

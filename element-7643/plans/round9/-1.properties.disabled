@@ -1,0 +1,8 @@
+ID=-1
+variableName=Foo
+className=org.matrix.android.sdk.internal.database.helper.ChunkEntityHelperKt
+methodName=addTimelineEvent
+parameterTypes=org.matrix.android.sdk.internal.database.model.ChunkEntity,java.lang.String,org.matrix.android.sdk.internal.database.model.EventEntity,org.matrix.android.sdk.internal.session.room.timeline.PaginationDirection,boolean,java.util.Map
+lineNumber=ENTRY
+byteCodeIndex=-1
+strategy=stackTrace

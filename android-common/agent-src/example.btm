@@ -1,0 +1,22 @@
+POINT: 0
+CLASS: Lorg/matrix/android/sdk/internal/session/room/send/DefaultSendService;
+METHOD: sendTextMessage
+AT: 0
+VARS: int text
+SIGNATURE: (Ljava/lang/CharSequence;Ljava/lang/String;ZLjava/util/Map;)Lorg/matrix/android/sdk/api/util/Cancelable;
+
+POINT: 1
+CLASS: Lorg/matrix/android/sdk/internal/session/room/send/LocalEchoEventFactory;
+METHOD: createEvent
+AT: 0
+
+POINT: 2
+CLASS: Lorg/matrix/android/sdk/internal/session/room/send/DefaultSendService;
+METHOD: createLocalEcho
+AT: 0
+
+POINT: 3
+CLASS: Lorg/matrix/android/sdk/internal/session/room/send/DefaultSendService;
+METHOD: sendEvent
+AT: 0
+SIGNATURE: (Lorg/matrix/android/sdk/api/session/events/model/Event;)Lorg/matrix/android/sdk/api/util/Cancelable;

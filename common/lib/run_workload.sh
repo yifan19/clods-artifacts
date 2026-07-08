@@ -29,6 +29,19 @@ remote_run_n() {
     fi
 }
 
+reset_cluster() {
+    # The original benchmark_scripts/*.sh (benchmark_ycsb_hbase.sh, benchmark_ycsb_cass.sh, ...)
+    # each start with a stop/clean/<component>/start sequence — every round in the real protocol
+    # runs against a completely fresh cluster, so a previous round's injected fault (or any data
+    # it left behind) can't leak into the next round. Baseline already gets this for free from
+    # run_experiment.sh's own format+start immediately before this script runs, so this is only
+    # needed between rounds.
+    echo "== resetting cluster for a fresh round =="
+    /opt/lib/cluster_ctl.sh clean
+    /opt/lib/cluster_ctl.sh format
+    /opt/lib/cluster_ctl.sh start
+}
+
 inject_round() {
     local round="$1"
     for host in $(target_hosts); do
@@ -47,7 +60,49 @@ collect_phase() {
     local label="$1" name="$2"
     for host in $(target_hosts); do
         remote_run_n "$host" collect | tee "$RESULTS_DIR/${label}${name}_${host}.result"
+        collect_node_artifacts "$host" "${label}${name}_${host}"
     done
+}
+
+pull_path() {
+    # $1 = host, $2 = is_local (1|0), $3 = remote path, $4 = local dest dir. Best-effort: silently
+    # skips anything that doesn't exist there (most bugs only configure a subset of
+    # Hadoop/HBase/ZooKeeper/Cassandra/HiBench, so most of these paths won't exist on any given
+    # bug's nodes) rather than failing the whole collect step under `set -e`.
+    local host="$1" is_local="$2" src="$3" dest="$4"
+    mkdir -p "$dest"
+    if [ "$is_local" = 1 ]; then
+        if [ -e "$src" ]; then
+            cp -r "$src"/. "$dest"/ 2>/dev/null || true
+        fi
+    else
+        if ssh "$host" "[ -e '$src' ]" 2>/dev/null; then
+            scp -rq "$host:$src/." "$dest/" 2>/dev/null || true
+        fi
+    fi
+}
+
+collect_node_artifacts() {
+    # $1 = host, $2 = destination prefix (e.g. "writebaseline_slave1"). Pulls everything worth
+    # keeping off that node: the instrumentation tool's raw /data dump (original
+    # benchmark_scripts/*.sh did `scp $slave:'/data/*' ...`) and every configured component's log
+    # directory — Hadoop always, HBase/ZooKeeper/Cassandra/HiBench only if this bug uses them.
+    local host="$1" prefix="$2" is_local=0
+    if [ "$host" = "$MASTER_HOST" ] || [ "$host" = "master" ]; then
+        is_local=1
+    fi
+
+    pull_path "$host" "$is_local" "/data" "$RESULTS_DIR/${prefix}_data"
+    pull_path "$host" "$is_local" "/home/ubuntu/${HADOOP_NAME}/logs" "$RESULTS_DIR/${prefix}_logs/hadoop"
+    [ -n "${HBASE_NAME:-}" ] &&
+        pull_path "$host" "$is_local" "/home/ubuntu/${HBASE_NAME}/logs" "$RESULTS_DIR/${prefix}_logs/hbase"
+    [ -n "${ZOOKEEPER_NAME:-}" ] &&
+        pull_path "$host" "$is_local" "/home/ubuntu/${ZOOKEEPER_NAME}/logs" "$RESULTS_DIR/${prefix}_logs/zookeeper"
+    [ -n "${CASSANDRA_NAME:-}" ] &&
+        pull_path "$host" "$is_local" "/home/ubuntu/${CASSANDRA_NAME}/logs" "$RESULTS_DIR/${prefix}_logs/cassandra"
+    [ -n "${HIBENCH_NAME:-}" ] &&
+        pull_path "$host" "$is_local" "/home/ubuntu/${HIBENCH_NAME}/report" "$RESULTS_DIR/${prefix}_logs/hibench"
+    true
 }
 
 setup_once() {
@@ -154,6 +209,8 @@ main() {
 
     for round in $ROUNDS; do
         echo "###### round r$round ######"
+        reset_cluster
+        setup_once
         inject_round "$round"
         if [ "$WORKLOAD" = "hibench" ]; then
             run_hibench_pair "r${round}"

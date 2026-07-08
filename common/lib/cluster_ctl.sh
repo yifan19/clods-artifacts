@@ -29,7 +29,12 @@ cmd_prepare() {
 cmd_format() {
     echo "== format: namenode =="
     rm -rf /tmp/hadoop-ubuntu
-    yes 'Y' | "$HADOOP_DIR/bin/hadoop" namenode -format
+    # -force skips the interactive Y/N confirmation outright. A `yes 'Y' | ... -format` pipe was
+    # used before, but since the dir was just removed above there's nothing to confirm — format
+    # never reads from stdin, so `yes` keeps writing until it's SIGPIPE'd, and under `set -o
+    # pipefail` that intermittently fails the whole pipeline (exit 141) even though format itself
+    # succeeded.
+    "$HADOOP_DIR/bin/hadoop" namenode -format -force
     for host in $SLAVE_HOSTS; do
         ssh "$host" "rm -rf /tmp/hadoop-ubuntu"
     done
@@ -82,12 +87,17 @@ cmd_stop() {
 
 cmd_clean() {
     cmd_stop || true
+    # /tmp/hbase-ubuntu is HBase's default hbase.tmp.dir, which is also where HBase's embedded
+    # ZooKeeper (HBASE_MANAGES_ZK=true, see render_config.py) keeps its data. Without wiping it
+    # here, a "reformat" leaves stale table/region metadata behind in ZK even though the
+    # underlying HDFS data is gone — "Table already exists" on recreate, then
+    # TableNotFoundException once the workload actually tries to use it.
     for host in $SLAVE_HOSTS master; do
         [ "$host" = "master" ] && continue
-        ssh "$host" 'killall -q -9 java 2>/dev/null; rm -rf /tmp/hadoop-ubuntu* /home/ubuntu/zk_storage' || true
+        ssh "$host" 'killall -q -9 java 2>/dev/null; rm -rf /tmp/hadoop-ubuntu* /tmp/hbase-ubuntu* /home/ubuntu/zk_storage' || true
     done
     killall -q -9 java 2>/dev/null || true
-    rm -rf /tmp/hadoop-ubuntu* /home/ubuntu/zk_storage
+    rm -rf /tmp/hadoop-ubuntu* /tmp/hbase-ubuntu* /home/ubuntu/zk_storage
 }
 
 cmd_status() {

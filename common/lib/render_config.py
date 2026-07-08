@@ -18,6 +18,7 @@ run_experiment.sh / docker-compose.yml:
   DFS_REPLICATION    default: min(3, len(SLAVE_HOSTS))
 """
 import os
+import socket
 import sys
 
 HOME = os.path.expanduser("~")
@@ -117,11 +118,23 @@ def main():
         hbase_conf = os.path.join(hbase_dir, "conf")
         has_standalone_zk = bool(zookeeper_name and slaves)
         zk_quorum = ",".join(slaves) if has_standalone_zk else master
+        # docker-compose's network registers each container under two DNS names: the short
+        # `hostname:` alias (e.g. "slave1") and an auto-generated one
+        # (e.g. "hdfs-10453-slave1-1.hdfs-10453_bugnet"). Left to its own hostname
+        # auto-detection, HMaster resolves a regionserver's connecting IP to the auto-generated
+        # name instead of the short one everything else here uses (SSH, the regionservers file,
+        # ZK assignment) — "Master passed us a different hostname to use" in the RS log — so the
+        # meta region's assignment gets recorded under a mismatched identity, is declared
+        # hijacked, and never recovers (HMaster hangs forever waiting for it). Pinning the
+        # hostname explicitly bypasses that reverse-DNS ambiguity.
+        this_host = socket.gethostname()
         write(os.path.join(hbase_conf, "hbase-site.xml"), xml_props([
             ("hbase.rootdir", "hdfs://%s:9000/hbase" % master),
             ("hbase.cluster.distributed", "true"),
             ("hbase.zookeeper.quorum", zk_quorum),
             ("hbase.zookeeper.property.clientPort", "2181"),
+            ("hbase.regionserver.hostname", this_host),
+            ("hbase.master.hostname", this_host),
         ]))
         write(os.path.join(hbase_conf, "regionservers"), "\n".join(slaves) + "\n")
         with open(os.path.join(hbase_conf, "hbase-env.sh"), "a") as f:

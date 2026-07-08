@@ -26,14 +26,42 @@ PLAN_DIR=${INST_DIR:-/plans}
 case "${1:-}" in
 inject)
     appname="${2:?usage: run_n.sh inject <AppNameSubstring>}"
-    testpid=$(jps | grep -i "$appname" | awk '{print $1}' | head -n1)
+
+    # jps can race a freshly-(re)started daemon — every round now resets the whole cluster first
+    # (see run_workload.sh's reset_cluster), so retry instead of failing on the first miss.
+    testpid=""
+    for _ in $(seq 1 15); do
+        testpid=$(jps | grep -i "$appname" | awk '{print $1}' | head -n1)
+        [ -n "$testpid" ] && break
+        sleep 2
+    done
     if [ -z "$testpid" ]; then
-        echo "[run_n] no running JVM matching '$appname' found in: $(jps)" >&2
+        echo "[run_n] no running JVM matching '$appname' found after waiting, in: $(jps)" >&2
         exit 1
     fi
-    echo "[run_n] attaching to pid $testpid ($appname)"
-    java -cp "$JAVA_HOME/lib/tools.jar:$INSTRUMENTATION_JAR" \
-        ca.uoft.drsg.bminstrument.Launcher "$INSTRUMENTATION_JAR" "$testpid"
+
+    # AgentLoader (what Launcher invokes) catches every exception from VirtualMachine.attach/
+    # loadAgent and only logs it via log4j — it never re-throws, so `java ... Launcher` exits 0
+    # whether or not the agent actually loaded. The only real signal that instrumentation is live
+    # is the probe's control port (8089, see PseudoClient) actually accepting connections, so
+    # verify that directly instead of trusting the exit code, retrying the attach if needed.
+    attached=0
+    for attempt in 1 2 3; do
+        echo "[run_n] attaching to pid $testpid ($appname), attempt $attempt"
+        java -cp "$JAVA_HOME/lib/tools.jar:$INSTRUMENTATION_JAR" \
+            ca.uoft.drsg.bminstrument.Launcher "$INSTRUMENTATION_JAR" "$testpid"
+        sleep 2
+        if (: < /dev/tcp/127.0.0.1/8089) 2>/dev/null; then
+            attached=1
+            break
+        fi
+        echo "[run_n] probe port 8089 not up yet after attach attempt $attempt, retrying" >&2
+    done
+    if [ "$attached" != 1 ]; then
+        echo "[run_n] FAILED: instrumentation agent never came up on pid $testpid ($appname) — probe port 8089 unreachable after $attempt attempts" >&2
+        exit 1
+    fi
+    echo "[run_n] confirmed instrumentation agent is listening on 8089"
     ;;
 add)
     round="${2:?usage: run_n.sh add <round-number>}"

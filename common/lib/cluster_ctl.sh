@@ -29,11 +29,7 @@ cmd_prepare() {
 cmd_format() {
     echo "== format: namenode =="
     rm -rf /tmp/hadoop-ubuntu
-    # -force skips the interactive Y/N confirmation outright. A `yes 'Y' | ... -format` pipe was
-    # used before, but since the dir was just removed above there's nothing to confirm — format
-    # never reads from stdin, so `yes` keeps writing until it's SIGPIPE'd, and under `set -o
-    # pipefail` that intermittently fails the whole pipeline (exit 141) even though format itself
-    # succeeded.
+
     "$HADOOP_DIR/bin/hadoop" namenode -format -force
     for host in $SLAVE_HOSTS; do
         ssh "$host" "rm -rf /tmp/hadoop-ubuntu"

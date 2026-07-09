@@ -18,6 +18,7 @@ run_experiment.sh / docker-compose.yml:
   DFS_REPLICATION    default: min(3, len(SLAVE_HOSTS))
 """
 import os
+import re
 import socket
 import sys
 
@@ -52,63 +53,67 @@ def main():
     hadoop_name = os.environ["HADOOP_NAME"]
     hbase_name = os.environ.get("HBASE_NAME", "")
     zookeeper_name = os.environ.get("ZOOKEEPER_NAME", "")
+    cassandra_name = os.environ.get("CASSANDRA_NAME", "")
     master = os.environ.get("MASTER_HOST", "master")
     slaves = os.environ.get("SLAVE_HOSTS", "").split()
     enable_yarn = os.environ.get("ENABLE_YARN", "0") == "1"
     replication = int(os.environ.get("DFS_REPLICATION", str(min(3, max(1, len(slaves))))))
 
-    hadoop_dir = os.path.join(HOME, hadoop_name)
-    if not os.path.isdir(hadoop_dir):
-        sys.exit("expected %s to exist (did deploy_and_start.sh extract the tarball first?)" % hadoop_dir)
+    # Not every bug uses Hadoop/HDFS at all (e.g. cassandra-13004 is Cassandra-only,
+    # HADOOP_NAME=""), so this whole block is conditional rather than assumed.
+    if hadoop_name:
+        hadoop_dir = os.path.join(HOME, hadoop_name)
+        if not os.path.isdir(hadoop_dir):
+            sys.exit("expected %s to exist (did deploy_and_start.sh extract the tarball first?)" % hadoop_dir)
 
-    modern = os.path.isdir(os.path.join(hadoop_dir, "etc", "hadoop"))
-    conf_dir = os.path.join(hadoop_dir, "etc", "hadoop") if modern else os.path.join(hadoop_dir, "conf")
-    print("detected %s hadoop layout at %s" % ("modern (etc/hadoop)" if modern else "legacy (conf)", conf_dir))
+        modern = os.path.isdir(os.path.join(hadoop_dir, "etc", "hadoop"))
+        conf_dir = os.path.join(hadoop_dir, "etc", "hadoop") if modern else os.path.join(hadoop_dir, "conf")
+        print("detected %s hadoop layout at %s" % ("modern (etc/hadoop)" if modern else "legacy (conf)", conf_dir))
 
-    # --- core-site.xml -------------------------------------------------
-    write(os.path.join(conf_dir, "core-site.xml"), xml_props([
-        ("fs.default.name", "hdfs://%s:9000" % master),
-        ("fs.defaultFS", "hdfs://%s:9000" % master),
-        ("hadoop.tmp.dir", "/tmp/hadoop-${user.name}"),
-    ]))
-
-    # --- hdfs-site.xml ---------------------------------------------------
-    write(os.path.join(conf_dir, "hdfs-site.xml"), xml_props([
-        ("dfs.replication", str(replication)),
-        ("dfs.permissions", "false"),
-        ("dfs.namenode.name.dir", "/tmp/hadoop-${user.name}/dfs/name"),
-        ("dfs.datanode.data.dir", "/tmp/hadoop-${user.name}/dfs/data"),
-    ]))
-
-    # --- masters / slaves ------------------------------------------------
-    slaves_file = "slaves" if not (modern and os.path.exists(os.path.join(conf_dir, "workers"))) else "workers"
-    write(os.path.join(conf_dir, slaves_file), "\n".join(slaves) + "\n")
-    if not modern:
-        write(os.path.join(conf_dir, "masters"), master + "\n")
-
-    # --- hadoop-env.sh: make sure JAVA_HOME + running-as-root (container) work ---
-    env_file = os.path.join(conf_dir, "hadoop-env.sh")
-    extra_env = (
-        "\nexport JAVA_HOME=%s\n"
-        "export HADOOP_HOME_WARN_SUPPRESS=1\n"
-        "export HDFS_NAMENODE_USER=ubuntu\n"
-        "export HDFS_DATANODE_USER=ubuntu\n"
-        "export HDFS_SECONDARYNAMENODE_USER=ubuntu\n"
-        "export YARN_RESOURCEMANAGER_USER=ubuntu\n"
-        "export YARN_NODEMANAGER_USER=ubuntu\n"
-    ) % os.environ.get("JAVA_HOME", "/usr/lib/jvm/java-8-openjdk-amd64")
-    with open(env_file, "a") as f:
-        f.write(extra_env)
-    print("appended JAVA_HOME/*_USER exports to " + env_file)
-
-    if enable_yarn and modern:
-        write(os.path.join(conf_dir, "yarn-site.xml"), xml_props([
-            ("yarn.resourcemanager.hostname", master),
-            ("yarn.nodemanager.aux-services", "mapreduce_shuffle"),
+        # --- core-site.xml -------------------------------------------------
+        write(os.path.join(conf_dir, "core-site.xml"), xml_props([
+            ("fs.default.name", "hdfs://%s:9000" % master),
+            ("fs.defaultFS", "hdfs://%s:9000" % master),
+            ("hadoop.tmp.dir", "/tmp/hadoop-${user.name}"),
         ]))
-        write(os.path.join(conf_dir, "mapred-site.xml"), xml_props([
-            ("mapreduce.framework.name", "yarn"),
+
+        # --- hdfs-site.xml ---------------------------------------------------
+        write(os.path.join(conf_dir, "hdfs-site.xml"), xml_props([
+            ("dfs.replication", str(replication)),
+            ("dfs.permissions", "false"),
+            ("dfs.namenode.name.dir", "/tmp/hadoop-${user.name}/dfs/name"),
+            ("dfs.datanode.data.dir", "/tmp/hadoop-${user.name}/dfs/data"),
         ]))
+
+        # --- masters / slaves ------------------------------------------------
+        slaves_file = "slaves" if not (modern and os.path.exists(os.path.join(conf_dir, "workers"))) else "workers"
+        write(os.path.join(conf_dir, slaves_file), "\n".join(slaves) + "\n")
+        if not modern:
+            write(os.path.join(conf_dir, "masters"), master + "\n")
+
+        # --- hadoop-env.sh: make sure JAVA_HOME + running-as-root (container) work ---
+        env_file = os.path.join(conf_dir, "hadoop-env.sh")
+        extra_env = (
+            "\nexport JAVA_HOME=%s\n"
+            "export HADOOP_HOME_WARN_SUPPRESS=1\n"
+            "export HDFS_NAMENODE_USER=ubuntu\n"
+            "export HDFS_DATANODE_USER=ubuntu\n"
+            "export HDFS_SECONDARYNAMENODE_USER=ubuntu\n"
+            "export YARN_RESOURCEMANAGER_USER=ubuntu\n"
+            "export YARN_NODEMANAGER_USER=ubuntu\n"
+        ) % os.environ.get("JAVA_HOME", "/usr/lib/jvm/java-8-openjdk-amd64")
+        with open(env_file, "a") as f:
+            f.write(extra_env)
+        print("appended JAVA_HOME/*_USER exports to " + env_file)
+
+        if enable_yarn and modern:
+            write(os.path.join(conf_dir, "yarn-site.xml"), xml_props([
+                ("yarn.resourcemanager.hostname", master),
+                ("yarn.nodemanager.aux-services", "mapreduce_shuffle"),
+            ]))
+            write(os.path.join(conf_dir, "mapred-site.xml"), xml_props([
+                ("mapreduce.framework.name", "yarn"),
+            ]))
 
     # --- HBase --------------------------------------------------------
     if hbase_name:
@@ -178,6 +183,24 @@ def main():
             "%s\n"
         ) % (data_dir, server_lines)
         write(os.path.join(zk_dir, "conf", "zoo.cfg"), zoo_cfg)
+
+    # --- Cassandra (single seed on master, see cluster_ctl.sh's cmd_start) -----
+    if cassandra_name:
+        cassandra_dir = os.path.join(HOME, cassandra_name)
+        if not os.path.isdir(cassandra_dir):
+            sys.exit("expected %s to exist" % cassandra_dir)
+        yaml_path = os.path.join(cassandra_dir, "conf", "cassandra.yaml")
+        with open(yaml_path) as f:
+            yaml_content = f.read()
+        this_host = socket.gethostname()
+        # The vendored tarball's cassandra.yaml defaults listen_address/rpc_address/seeds to
+        # localhost/127.0.0.1 — nothing else here rewrites Cassandra's config the way the other
+        # components' sections do, so the daemon binds only to loopback and every client (cqlsh,
+        # YCSB) gets "Connection refused" connecting to the container's real hostname instead.
+        yaml_content = re.sub(r"(?m)^listen_address:.*$", "listen_address: %s" % this_host, yaml_content)
+        yaml_content = re.sub(r"(?m)^rpc_address:.*$", "rpc_address: %s" % this_host, yaml_content)
+        yaml_content = re.sub(r'(?m)^(\s*- seeds:\s*)".*"', r'\1"%s"' % master, yaml_content)
+        write(yaml_path, yaml_content)
 
 
 if __name__ == "__main__":

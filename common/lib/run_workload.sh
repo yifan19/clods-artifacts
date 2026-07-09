@@ -74,7 +74,7 @@ collect_phase() {
     # experimental_results/), so a fresh run diffs directly against them.
     local label="$1" name="$2"
     for host in $(target_hosts); do
-        remote_run_n "$host" collect | tee "$RESULTS_DIR/${label}${name}_${host}.result"
+        remote_run_n "$host" collect > "$RESULTS_DIR/${label}${name}_${host}.result" 2>&1
         collect_node_artifacts "$host" "${label}${name}_${host}"
     done
 }
@@ -197,9 +197,21 @@ create '${YCSB_TABLE:-ycsb}', '${YCSB_CF:-cf}', splits"
         done
         ;;
     ycsb_cass)
-        local seed=$MASTER_HOST
-        echo "create keyspace ycsb WITH REPLICATION = {'class':'SimpleStrategy','replication_factor':1};" \
-            | "/home/ubuntu/${CASSANDRA_NAME}/bin/cqlsh" "$seed"
+        # Same class of race as run_hbase_shell_retry/zkCli: cassandra's process is up (per
+        # cmd_start()'s fixed sleep 15) but the native transport (port 9042) can take longer to
+        # actually start listening after joining the ring, so a fresh cqlsh session right after
+        # can hit "Unable to connect to any servers" / "Connection refused".
+        local seed=$MASTER_HOST attempt output
+        for attempt in 1 2 3 4 5; do
+            output=$(echo "create keyspace ycsb WITH REPLICATION = {'class':'SimpleStrategy','replication_factor':1};" \
+                | "/home/ubuntu/${CASSANDRA_NAME}/bin/cqlsh" "$seed" 2>&1) || true
+            echo "$output"
+            if ! echo "$output" | grep -qE "Unable to connect|Connection refused"; then
+                break
+            fi
+            echo "[setup_once] cqlsh hit a connection error (attempt $attempt/5), retrying in 10s..." >&2
+            sleep 10
+        done
         echo "create table ycsb.usertable (
             y_id varchar primary key, field0 varchar, field1 varchar, field2 varchar,
             field3 varchar, field4 varchar, field5 varchar, field6 varchar, field7 varchar,
@@ -229,9 +241,15 @@ run_ycsb() {
         # /home/ubuntu/${YCSB_NAME}, so the old relative form resolved to nonexistent nested
         # paths and crashed under set -e).
         cp "/home/ubuntu/${HBASE_NAME}/conf/hbase-site.xml" "/home/ubuntu/${YCSB_NAME}/${YCSB_BINDING}-binding/conf/" 2>/dev/null || true
+        # Redirect straight to the results file rather than `| tee` to stdout: at NUM=1000000,
+        # YCSB's per-op trace floods the docker-exec-managed pipe back to the host with ~1M lines,
+        # and that pipe's Go-side (moby/containerd) buffering occasionally returns EAGAIN on write(),
+        # which — combined with tee's own non-zero exit and this script's `set -e` — kills the whole
+        # run. The live stdout echo was never consumed by anything (run_ycsb's caller doesn't
+        # capture it), so dropping it removes the failure point without losing any data.
         ./bin/ycsb "$op" "${YCSB_BINDING}" -P workloads/workloada -s \
             -p recordcount="$NUM" -p table="${YCSB_TABLE:-ycsb}" -p columnfamily="${YCSB_CF:-cf}" \
-            -p recordcolumn=f1 -p operationcount="$NUM" 2>&1 | tee "$RESULTS_DIR/${label}${name}.log"
+            -p recordcolumn=f1 -p operationcount="$NUM" > "$RESULTS_DIR/${label}${name}.log" 2>&1
         ;;
     ycsb_zk)
         # site.ycsb.db.zookeeper.ZKClient reads zookeeper.connectString directly (not the
@@ -244,14 +262,16 @@ run_ycsb() {
         zk_connect=""
         for host in $SLAVE_HOSTS; do zk_connect="${zk_connect}${host}:2181,"; done
         zk_connect="${zk_connect%,}${zk_chroot}"
+        # See the ycsb_hbase branch above for why this writes directly to the results file
+        # instead of `| tee`-ing to stdout through the docker-exec pipe.
         ./bin/ycsb "$op" zookeeper -P workloads/workloada -s \
             -p recordcount="$NUM" -p operationcount="$NUM" -p zookeeper.connectString="$zk_connect" \
-            2>&1 | tee "$RESULTS_DIR/${label}${name}.log"
+            > "$RESULTS_DIR/${label}${name}.log" 2>&1
         ;;
     ycsb_cass)
         ./bin/ycsb "$op" cassandra-cql -P workloads/workloada -s \
             -p exportfile=result.csv -p recordcount="$NUM" -p operationcount="$NUM" \
-            -p hosts="$MASTER_HOST" 2>&1 | tee "$RESULTS_DIR/${label}${name}.log"
+            -p hosts="$MASTER_HOST" > "$RESULTS_DIR/${label}${name}.log" 2>&1
         ;;
     esac
     cd /home/ubuntu
@@ -272,13 +292,16 @@ run_hibench_pair() {
     # terasort's becomes "read" — both under the SAME single inject step, not two separate rounds.
     local name="$1"
     cd "/home/ubuntu/${HIBENCH_NAME}"
+    # Writes directly to the results file rather than `| tee`-ing to stdout — see the ycsb_hbase
+    # branch in run_ycsb() above for why: high-volume output through docker-exec's pipe can hit a
+    # transient EAGAIN that, combined with set -e, kills the whole run for no real reason.
     toggle_hibench_workload on websearch.pagerank
-    ./bin/run_all.sh 2>&1 | tee "$RESULTS_DIR/write_${name}.log"
+    ./bin/run_all.sh > "$RESULTS_DIR/write_${name}.log" 2>&1
     cp report/hibench.report "$RESULTS_DIR/write_report_${name}.tsv" 2>/dev/null || true
     toggle_hibench_workload off websearch.pagerank
 
     toggle_hibench_workload on micro.terasort
-    ./bin/run_all.sh 2>&1 | tee "$RESULTS_DIR/read_${name}.log"
+    ./bin/run_all.sh > "$RESULTS_DIR/read_${name}.log" 2>&1
     cp report/hibench.report "$RESULTS_DIR/read_report_${name}.tsv" 2>/dev/null || true
     toggle_hibench_workload off micro.terasort
     cd /home/ubuntu

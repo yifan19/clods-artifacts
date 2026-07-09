@@ -19,6 +19,15 @@ extract_once() {
     fi
     echo "[node_prepare] extracting $tarball"
     tar xzf "/binaries/$tarball" -C /home/ubuntu/
+    # Some vendored tarballs (e.g. hadoop-1.0.0) lose the executable bit on their bin/sbin
+    # scripts in transit, causing "Permission denied" the first time cluster_ctl.sh runs them.
+    # Re-set it defensively after every extraction rather than special-casing one version.
+    for d in "/home/ubuntu/$name/bin" "/home/ubuntu/$name/sbin"; do
+        if [ -d "$d" ]; then
+            chmod +x "$d"/* 2>/dev/null || true
+        fi
+    done
+    return 0
 }
 
 extract_once "$HADOOP_NAME"     "${HADOOP_NAME}.tar.gz"

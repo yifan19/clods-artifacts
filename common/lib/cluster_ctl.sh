@@ -29,7 +29,6 @@ cmd_prepare() {
 cmd_format() {
     echo "== format: namenode =="
     rm -rf /tmp/hadoop-ubuntu
-
     # No -force, no `yes` piping: the dir was just removed above, so format never has anything to
     # confirm and never reads from stdin regardless of version — no interactivity to suppress in
     # the first place. -force isn't even universally valid: hadoop-1.0.0's NameNode CLI rejects it

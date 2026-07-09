@@ -19,7 +19,7 @@ extract_once() {
     fi
     echo "[node_prepare] extracting $tarball"
     tar xzf "/binaries/$tarball" -C /home/ubuntu/
-    # Some vendored tarballs (e.g. hadoop-1.0.0) lose the executable bit on their bin/sbin
+    # Some older tarballs (e.g. hadoop-1.0.0) lose the executable bit on their bin/sbin
     # scripts in transit, causing "Permission denied" the first time cluster_ctl.sh runs them.
     # Re-set it defensively after every extraction rather than special-casing one version.
     for d in "/home/ubuntu/$name/bin" "/home/ubuntu/$name/sbin"; do
@@ -36,6 +36,7 @@ extract_once "$ZOOKEEPER_NAME"  "${ZOOKEEPER_NAME}.tar.gz"
 extract_once "$CASSANDRA_NAME"  "${CASSANDRA_NAME}-bin.tar.gz"
 extract_once "$YCSB_NAME"       "${YCSB_NAME}.tar.gz"
 extract_once "$HIBENCH_NAME"    "${HIBENCH_NAME}.tar.gz"
+
 
 if [ -n "${HADOOP_NAME:-}" ]; then
     python3 /opt/lib/render_config.py

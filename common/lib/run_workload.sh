@@ -97,11 +97,24 @@ pull_path() {
     fi
 }
 
+clear_path() {
+    # $1 = host, $2 = is_local (1|0), $3 = remote path. Removes the directory on the node right
+    # after pull_path has copied it off, so the next round's collect_node_artifacts doesn't
+    # re-pull (and double-count) the previous round's log files.
+    local host="$1" is_local="$2" src="$3"
+    if [ "$is_local" = 1 ]; then
+        rm -rf "${src:?}"
+    else
+        ssh "$host" "rm -rf '${src}'" 2>/dev/null || true
+    fi
+}
+
 collect_node_artifacts() {
     # $1 = host, $2 = destination prefix (e.g. "writebaseline_slave1"). Pulls everything worth
     # keeping off that node: the instrumentation tool's raw /data dump (original
     # benchmark_scripts/*.sh did `scp $slave:'/data/*' ...`) and every configured component's log
     # directory — Hadoop always, HBase/ZooKeeper/Cassandra/HiBench only if this bug uses them.
+    # Each log directory is cleared off the node right after being pulled.
     local host="$1" prefix="$2" is_local=0
     if [ "$host" = "$MASTER_HOST" ] || [ "$host" = "master" ]; then
         is_local=1
@@ -109,14 +122,24 @@ collect_node_artifacts() {
 
     pull_path "$host" "$is_local" "/data" "$RESULTS_DIR/${prefix}_data"
     pull_path "$host" "$is_local" "/home/ubuntu/${HADOOP_NAME}/logs" "$RESULTS_DIR/${prefix}_logs/hadoop"
-    [ -n "${HBASE_NAME:-}" ] &&
+    clear_path "$host" "$is_local" "/home/ubuntu/${HADOOP_NAME}/logs"
+    if [ -n "${HBASE_NAME:-}" ]; then
         pull_path "$host" "$is_local" "/home/ubuntu/${HBASE_NAME}/logs" "$RESULTS_DIR/${prefix}_logs/hbase"
-    [ -n "${ZOOKEEPER_NAME:-}" ] &&
+        clear_path "$host" "$is_local" "/home/ubuntu/${HBASE_NAME}/logs"
+    fi
+    if [ -n "${ZOOKEEPER_NAME:-}" ]; then
         pull_path "$host" "$is_local" "/home/ubuntu/${ZOOKEEPER_NAME}/logs" "$RESULTS_DIR/${prefix}_logs/zookeeper"
-    [ -n "${CASSANDRA_NAME:-}" ] &&
+        clear_path "$host" "$is_local" "/home/ubuntu/${ZOOKEEPER_NAME}/logs"
+    fi
+    if [ -n "${CASSANDRA_NAME:-}" ]; then
         pull_path "$host" "$is_local" "/home/ubuntu/${CASSANDRA_NAME}/logs" "$RESULTS_DIR/${prefix}_logs/cassandra"
-    [ -n "${HIBENCH_NAME:-}" ] &&
+        clear_path "$host" "$is_local" "/home/ubuntu/${CASSANDRA_NAME}/logs"
+    fi
+    if [ -n "${HIBENCH_NAME:-}" ]; then
         pull_path "$host" "$is_local" "/home/ubuntu/${HIBENCH_NAME}/report" "$RESULTS_DIR/${prefix}_logs/hibench"
+        clear_path "$host" "$is_local" "/home/ubuntu/${HIBENCH_NAME}/report"
+    fi
+
     true
 }
 
@@ -202,7 +225,9 @@ run_ycsb() {
     ycsb_hbase|ycsb_hbase_old)
         # render_config.py already writes the real config to /home/ubuntu/hbase-config/
         # hbase-site.xml, which every hbase*-binding/conf/hbase-site.xml symlinks to — this cp is
-        # a redundant reinforcement of the same file via that symlink.
+        # a redundant reinforcement of the same file (paths must be absolute: cwd here is
+        # /home/ubuntu/${YCSB_NAME}, so the old relative form resolved to nonexistent nested
+        # paths and crashed under set -e).
         cp "/home/ubuntu/${HBASE_NAME}/conf/hbase-site.xml" "/home/ubuntu/${YCSB_NAME}/${YCSB_BINDING}-binding/conf/" 2>/dev/null || true
         ./bin/ycsb "$op" "${YCSB_BINDING}" -P workloads/workloada -s \
             -p recordcount="$NUM" -p table="${YCSB_TABLE:-ycsb}" -p columnfamily="${YCSB_CF:-cf}" \

@@ -203,7 +203,7 @@ create '${YCSB_TABLE:-ycsb}', '${YCSB_CF:-cf}', splits"
         # can hit "Unable to connect to any servers" / "Connection refused".
         local seed=$MASTER_HOST attempt output
         for attempt in 1 2 3 4 5; do
-            output=$(echo "create keyspace ycsb WITH REPLICATION = {'class':'SimpleStrategy','replication_factor':1};" \
+            output=$(echo "create keyspace ycsb WITH REPLICATION = {'class':'SimpleStrategy','replication_factor':3};" \
                 | "/home/ubuntu/${CASSANDRA_NAME}/bin/cqlsh" "$seed" 2>&1) || true
             echo "$output"
             if ! echo "$output" | grep -qE "Unable to connect|Connection refused"; then

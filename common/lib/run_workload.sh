@@ -157,7 +157,20 @@ create '${YCSB_TABLE:-ycsb}', '${YCSB_CF:-cf}', splits"
         ;;
     ycsb_zk)
         for host in $SLAVE_HOSTS; do
-            ssh "$host" "cd ~/$ZOOKEEPER_NAME && echo '${ZK_NODE_CMD:-create /benchmark}' | ./bin/zkCli.sh"
+            # Same class of race as run_hbase_shell_retry: the ensemble may not have finished
+            # forming quorum yet right after zkServer.sh start's fixed sleep 5, so a fresh session
+            # can hit a transient ConnectionLossException. "Node already exists" (this znode was
+            # already created via a different ensemble member, or a previous attempt actually
+            # succeeded) is expected, not a failure to retry.
+            for attempt in 1 2 3 4 5; do
+                output=$(ssh "$host" "cd ~/$ZOOKEEPER_NAME && echo '${ZK_NODE_CMD:-create /benchmark}' | ./bin/zkCli.sh" 2>&1)
+                echo "$output"
+                if ! echo "$output" | grep -q "ConnectionLossException"; then
+                    break
+                fi
+                echo "[setup_once] zkCli.sh on $host hit ConnectionLossException (attempt $attempt/5), retrying in 10s..." >&2
+                sleep 10
+            done
         done
         ;;
     ycsb_cass)

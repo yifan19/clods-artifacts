@@ -33,7 +33,7 @@ final, confirmed probe), else inspect the highest-numbered `./plans/round<N>/`.
 
 ## Notes
 
-Single-seed Cassandra on 'master' for this artifact (the original replication_factor=3 keyspace assumed >=3 Cassandra nodes; reduced to replication_factor=1 here since this topology only runs one Cassandra node — see run_workload.sh).
+Cassandra runs on all 4 nodes (master + 3 slaves), matching the original historical setup (~/artifacts/old_setup.sh's 'cassandra' target, ~/artifacts/cassandra-config/cassandra.yaml's 4-address seed list) — replication_factor=3 for the ycsb keyspace, same as the original. Fault injection still targets 'cassandra' on master only (app_target above), matching the original bug report.
 
 
 ## Legacy local logs

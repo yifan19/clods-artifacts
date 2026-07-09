@@ -17,6 +17,14 @@ cd /home/ubuntu
 HADOOP_DIR="/home/ubuntu/${HADOOP_NAME:-}"
 hadoop_sbin() { [ -d "$HADOOP_DIR/sbin" ] && echo "$HADOOP_DIR/sbin" || echo "$HADOOP_DIR/bin"; }
 
+# cassandra-env.sh only auto-sizes MAX_HEAP_SIZE/HEAP_NEWSIZE when they're unset, and its
+# heuristic (~1/4 of system memory) is computed from /proc/meminfo, which inside a container
+# reports the HOST's full memory rather than anything container-specific. With 4 Cassandra nodes
+# on one host that would auto-size each to multiple GB and reliably OOM the host, so pin both
+# explicitly to something small enough for 4 concurrent nodes on this artifact's tiny (~1M-row)
+# datasets, which don't need more.
+cassandra_jvm_opts() { echo "MAX_HEAP_SIZE=1G HEAP_NEWSIZE=200M"; }
+
 cmd_prepare() {
     echo "== prepare: extracting + configuring every node =="
     # Each node's own docker-compose `environment:` (HADOOP_NAME, ZK_MYID, etc.) reaches its SSH
@@ -75,8 +83,12 @@ cmd_start() {
     fi
 
     if [ -n "${CASSANDRA_NAME:-}" ]; then
-        echo "== start: Cassandra (single seed on master) =="
-        "/home/ubuntu/${CASSANDRA_NAME}/bin/cassandra" -p /tmp/cassandra.pid
+        echo "== start: Cassandra (master + all slaves, see cassandra_jvm_opts) =="
+        # shellcheck disable=SC2046 # word-splitting is the point here (env var assignments)
+        env $(cassandra_jvm_opts) "/home/ubuntu/${CASSANDRA_NAME}/bin/cassandra" -p /tmp/cassandra.pid
+        for host in $SLAVE_HOSTS; do
+            ssh "$host" "cd ~/${CASSANDRA_NAME} && env $(cassandra_jvm_opts) ./bin/cassandra -p /tmp/cassandra.pid"
+        done
         sleep 15
     fi
     echo "== cluster up =="
@@ -88,7 +100,12 @@ cmd_stop() {
     # multi-minute hang on hbase-0.94.27's stop-hbase.sh waiting on an already-wedged HMaster).
     # cmd_clean()'s unconditional `killall -9 java` right after this is the real backstop, so a
     # timeout here just caps how long we wait for the polite version to work before it kicks in.
-    [ -n "${CASSANDRA_NAME:-}" ] && [ -f /tmp/cassandra.pid ] && kill "$(cat /tmp/cassandra.pid)" 2>/dev/null || true
+    if [ -n "${CASSANDRA_NAME:-}" ]; then
+        [ -f /tmp/cassandra.pid ] && kill "$(cat /tmp/cassandra.pid)" 2>/dev/null || true
+        for host in $SLAVE_HOSTS; do
+            ssh "$host" '[ -f /tmp/cassandra.pid ] && kill "$(cat /tmp/cassandra.pid)" 2>/dev/null' || true
+        done
+    fi
     [ "${ENABLE_YARN:-0}" = "1" ] && timeout 60 "$(hadoop_sbin)/stop-yarn.sh" || true
     [ -n "${HBASE_NAME:-}" ] && timeout 60 "/home/ubuntu/${HBASE_NAME}/bin/stop-hbase.sh" || true
     if [ -n "${ZOOKEEPER_NAME:-}" ]; then
@@ -115,9 +132,12 @@ cmd_clean() {
 }
 
 cmd_status() {
-    echo "master: $(jps || true)"
+    # jps can't see Cassandra (it launches with -XX:+PerfDisableSharedMem, which disables the
+    # hsperfdata jps reads from — see run_n.sh), so report it separately via pgrep.
+    status_line() { echo "$(jps || true); cassandra: $(pgrep -f -l CassandraDaemon || echo none)"; }
+    echo "master: $(status_line)"
     for host in $SLAVE_HOSTS; do
-        echo "$host: $(ssh "$host" jps || true)"
+        echo "$host: $(ssh "$host" "$(declare -f status_line); status_line" || true)"
     done
 }
 

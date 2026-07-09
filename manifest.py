@@ -255,9 +255,11 @@ BUGS = [
         rounds=[1, 2],
         origin_cmd="master_ycsb_cass.sh / benchmark_ycsb_cass.sh: CASSANDRA_NAME=apache-cassandra-3.10-SNAPSHOT "
                     "benchmark_ycsb_cass.sh {add|baseline} 1 1000000 1",
-        notes="Single-seed Cassandra on 'master' for this artifact (the original replication_factor=3 "
-              "keyspace assumed >=3 Cassandra nodes; reduced to replication_factor=1 here since this "
-              "topology only runs one Cassandra node — see run_workload.sh).",
+        notes="Cassandra runs on all 4 nodes (master + 3 slaves), matching the original historical "
+              "setup (~/artifacts/old_setup.sh's 'cassandra' target, ~/artifacts/cassandra-config/"
+              "cassandra.yaml's 4-address seed list) — replication_factor=3 for the ycsb keyspace, "
+              "same as the original. Fault injection still targets 'cassandra' on master only "
+              "(app_target above), matching the original bug report.",
     ),
     dict(
         id="yarn-1458",

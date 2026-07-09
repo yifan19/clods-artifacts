@@ -16,6 +16,7 @@ run_experiment.sh / docker-compose.yml:
   ZK_MYID            this node's ZooKeeper myid (only needed on nodes running ZK), 1-based
   ENABLE_YARN        "1" to also render yarn-site.xml/mapred-site.xml (only yarn-1458 needs this)
   DFS_REPLICATION    default: min(3, len(SLAVE_HOSTS))
+  HIBENCH_NAME       e.g. HiBench2         (optional)
 """
 import os
 import re
@@ -54,6 +55,7 @@ def main():
     hbase_name = os.environ.get("HBASE_NAME", "")
     zookeeper_name = os.environ.get("ZOOKEEPER_NAME", "")
     cassandra_name = os.environ.get("CASSANDRA_NAME", "")
+    hibench_name = os.environ.get("HIBENCH_NAME", "")
     master = os.environ.get("MASTER_HOST", "master")
     slaves = os.environ.get("SLAVE_HOSTS", "").split()
     enable_yarn = os.environ.get("ENABLE_YARN", "0") == "1"
@@ -184,7 +186,8 @@ def main():
         ) % (data_dir, server_lines)
         write(os.path.join(zk_dir, "conf", "zoo.cfg"), zoo_cfg)
 
-    # --- Cassandra (single seed on master, see cluster_ctl.sh's cmd_start) -----
+    # --- Cassandra (real multi-node cluster: master + every slave, see cluster_ctl.sh's
+    # cmd_start) -----
     if cassandra_name:
         cassandra_dir = os.path.join(HOME, cassandra_name)
         if not os.path.isdir(cassandra_dir):
@@ -199,8 +202,37 @@ def main():
         # YCSB) gets "Connection refused" connecting to the container's real hostname instead.
         yaml_content = re.sub(r"(?m)^listen_address:.*$", "listen_address: %s" % this_host, yaml_content)
         yaml_content = re.sub(r"(?m)^rpc_address:.*$", "rpc_address: %s" % this_host, yaml_content)
-        yaml_content = re.sub(r'(?m)^(\s*- seeds:\s*)".*"', r'\1"%s"' % master, yaml_content)
+        # The original historical setup (~/artifacts/cassandra-config/cassandra.yaml,
+        # ~/artifacts/old_setup.sh) ran Cassandra on all 4 nodes with all 4 listed as seeds
+        # ("172.31.18.101,172.31.17.254,172.31.26.151,172.31.25.246") — every node is its own
+        # seed's peer, matching a real small-cluster deployment rather than a single-seed
+        # simplification. Reproduce that here with all 4 short hostnames instead of the original's
+        # long-gone EC2 IPs.
+        all_hosts = ",".join([master] + slaves)
+        yaml_content = re.sub(r'(?m)^(\s*- seeds:\s*)".*"', r'\1"%s"' % all_hosts, yaml_content)
         write(yaml_path, yaml_content)
+
+    # --- HiBench --------------------------------------------------------
+    if hibench_name:
+        hibench_dir = os.path.join(HOME, hibench_name)
+        if not os.path.isdir(hibench_dir):
+            sys.exit("expected %s to exist" % hibench_dir)
+        hadoop_conf_path = os.path.join(hibench_dir, "conf", "hadoop.conf")
+        with open(hadoop_conf_path) as f:
+            content = f.read()
+        # The vendored tarball's conf/hadoop.conf isn't a generic template — it's a snapshot of
+        # the original historical run's actual config, hibench.hdfs.master hardcoded to that
+        # run's long-gone EC2 IP ("hdfs://172.31.18.101:9000") and hibench.hadoop.home to that
+        # run's absolute path. Nothing else here ever rewrote it, so every HiBench workload
+        # (pagerank, terasort) tries to reach a namenode that doesn't exist in this docker
+        # network and fails outright. Point both at this bug's actual Hadoop install/namenode.
+        content = re.sub(
+            r"(?m)^(hibench\.hadoop\.home\s+).*$",
+            r"\g<1>%s" % os.path.join(HOME, hadoop_name), content)
+        content = re.sub(
+            r"(?m)^(hibench\.hdfs\.master\s+).*$",
+            r"\g<1>hdfs://%s:9000" % master, content)
+        write(hadoop_conf_path, content)
 
 
 if __name__ == "__main__":

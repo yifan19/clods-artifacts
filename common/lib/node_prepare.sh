@@ -38,7 +38,7 @@ extract_once "$YCSB_NAME"       "${YCSB_NAME}.tar.gz"
 extract_once "$HIBENCH_NAME"    "${HIBENCH_NAME}.tar.gz"
 
 
-if [ -n "${HADOOP_NAME:-}" ]; then
+if [ -n "${HADOOP_NAME:-}" ] || [ -n "${CASSANDRA_NAME:-}" ]; then
     python3 /opt/lib/render_config.py
 fi
 echo "[node_prepare] done on $(hostname)"

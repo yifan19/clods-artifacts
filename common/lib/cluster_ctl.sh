@@ -11,7 +11,10 @@
 # (optional), ENABLE_YARN (0/1), SLAVE_HOSTS (space-separated hostnames), MASTER_HOST.
 set -euo pipefail
 cd /home/ubuntu
-HADOOP_DIR="/home/ubuntu/${HADOOP_NAME:?HADOOP_NAME not set}"
+# Not every bug uses Hadoop/HDFS at all (e.g. cassandra-13004 is Cassandra-only, HADOOP_NAME=""),
+# so this can't be a hard requirement — every Hadoop-specific command below is itself guarded on
+# HADOOP_NAME being set, and HADOOP_DIR/hadoop_sbin are simply never called otherwise.
+HADOOP_DIR="/home/ubuntu/${HADOOP_NAME:-}"
 hadoop_sbin() { [ -d "$HADOOP_DIR/sbin" ] && echo "$HADOOP_DIR/sbin" || echo "$HADOOP_DIR/bin"; }
 
 cmd_prepare() {
@@ -27,6 +30,10 @@ cmd_prepare() {
 }
 
 cmd_format() {
+    if [ -z "${HADOOP_NAME:-}" ]; then
+        echo "== format: skipped (this bug doesn't use Hadoop/HDFS) =="
+        return 0
+    fi
     echo "== format: namenode =="
     rm -rf /tmp/hadoop-ubuntu
     # No -force, no `yes` piping: the dir was just removed above, so format never has anything to
@@ -41,9 +48,11 @@ cmd_format() {
 }
 
 cmd_start() {
-    echo "== start: HDFS =="
-    "$(hadoop_sbin)/start-dfs.sh"
-    sleep 5
+    if [ -n "${HADOOP_NAME:-}" ]; then
+        echo "== start: HDFS =="
+        "$(hadoop_sbin)/start-dfs.sh"
+        sleep 5
+    fi
 
     if [ -n "${ZOOKEEPER_NAME:-}" ]; then
         echo "== start: ZooKeeper ensemble (on slaves) =="
@@ -87,7 +96,7 @@ cmd_stop() {
             ssh "$host" "cd ~/$ZOOKEEPER_NAME && timeout 60 ./bin/zkServer.sh stop" || true
         done
     fi
-    timeout 60 "$(hadoop_sbin)/stop-dfs.sh" || true
+    [ -n "${HADOOP_NAME:-}" ] && timeout 60 "$(hadoop_sbin)/stop-dfs.sh" || true
 }
 
 cmd_clean() {

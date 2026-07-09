@@ -29,9 +29,18 @@ inject)
 
     # jps can race a freshly-(re)started daemon — every round now resets the whole cluster first
     # (see run_workload.sh's reset_cluster), so retry instead of failing on the first miss.
+    #
+    # jps is also structurally blind to some JVMs: Cassandra launches with -XX:+PerfDisableSharedMem,
+    # which disables the hsperfdata shared-memory file jps discovers processes through, so jps never
+    # lists it no matter how long we wait (confirmed via `ps`: the JVM is fully up and serving on
+    # 9042, yet `jps -l` shows only jps's own process). Fall back to `pgrep -f`, which matches
+    # against the full command line instead of hsperfdata, and works for every appname here.
     testpid=""
     for _ in $(seq 1 15); do
         testpid=$(jps | grep -i "$appname" | awk '{print $1}' | head -n1)
+        if [ -z "$testpid" ]; then
+            testpid=$(pgrep -f -i "$appname" | head -n1)
+        fi
         [ -n "$testpid" ] && break
         sleep 2
     done

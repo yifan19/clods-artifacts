@@ -129,7 +129,7 @@ run_hbase_shell_retry() {
     # exists" is also reported as an ERROR line but isn't actually a failure, so it's excluded.
     local script="$1" attempt output
     for attempt in 1 2 3 4 5; do
-        output=$("/home/ubuntu/${HBASE_NAME}/bin/hbase" shell <<< "$script" 2>&1)
+        output=$("/home/ubuntu/${HBASE_NAME}/bin/hbase" shell <<< "$script" 2>&1) || true
         echo "$output"
         if ! echo "$output" | grep -q "^ERROR"; then
             return 0
@@ -163,7 +163,7 @@ create '${YCSB_TABLE:-ycsb}', '${YCSB_CF:-cf}', splits"
             # already created via a different ensemble member, or a previous attempt actually
             # succeeded) is expected, not a failure to retry.
             for attempt in 1 2 3 4 5; do
-                output=$(ssh "$host" "cd ~/$ZOOKEEPER_NAME && echo '${ZK_NODE_CMD:-create /benchmark}' | ./bin/zkCli.sh" 2>&1)
+                output=$(ssh "$host" "cd ~/$ZOOKEEPER_NAME && echo '${ZK_NODE_CMD:-create /benchmark}' | ./bin/zkCli.sh" 2>&1) || true
                 echo "$output"
                 if ! echo "$output" | grep -q "ConnectionLossException"; then
                     break
@@ -209,8 +209,19 @@ run_ycsb() {
             -p recordcolumn=f1 -p operationcount="$NUM" 2>&1 | tee "$RESULTS_DIR/${label}${name}.log"
         ;;
     ycsb_zk)
+        # site.ycsb.db.zookeeper.ZKClient reads zookeeper.connectString directly (not the
+        # generic `hosts=` property workloads/workloada happens to define, which is a leftover
+        # from the original researchers' real, long-gone EC2 IPs and this binding never reads) —
+        # confirmed via the class's own constant pool. Format is host:port,host:port/chroot,
+        # matching the znode path setup_once() creates via ZK_NODE_CMD (default /benchmark).
+        local zk_chroot zk_connect host
+        zk_chroot=$(echo "${ZK_NODE_CMD:-create /benchmark}" | awk '{print $2}')
+        zk_connect=""
+        for host in $SLAVE_HOSTS; do zk_connect="${zk_connect}${host}:2181,"; done
+        zk_connect="${zk_connect%,}${zk_chroot}"
         ./bin/ycsb "$op" zookeeper -P workloads/workloada -s \
-            -p recordcount="$NUM" -p operationcount="$NUM" 2>&1 | tee "$RESULTS_DIR/${label}${name}.log"
+            -p recordcount="$NUM" -p operationcount="$NUM" -p zookeeper.connectString="$zk_connect" \
+            2>&1 | tee "$RESULTS_DIR/${label}${name}.log"
         ;;
     ycsb_cass)
         ./bin/ycsb "$op" cassandra-cql -P workloads/workloada -s \

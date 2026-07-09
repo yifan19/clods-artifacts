@@ -128,15 +128,25 @@ def main():
         # hijacked, and never recovers (HMaster hangs forever waiting for it). Pinning the
         # hostname explicitly bypasses that reverse-DNS ambiguity.
         this_host = socket.gethostname()
-        write(os.path.join(hbase_conf, "hbase-site.xml"), xml_props([
+        hbase_site_props = xml_props([
             ("hbase.rootdir", "hdfs://%s:9000/hbase" % master),
             ("hbase.cluster.distributed", "true"),
             ("hbase.zookeeper.quorum", zk_quorum),
             ("hbase.zookeeper.property.clientPort", "2181"),
             ("hbase.regionserver.hostname", this_host),
             ("hbase.master.hostname", this_host),
-        ]))
+        ])
+        write(os.path.join(hbase_conf, "hbase-site.xml"), hbase_site_props)
         write(os.path.join(hbase_conf, "regionservers"), "\n".join(slaves) + "\n")
+        # YCSB's own client (com.yahoo.ycsb.Client) doesn't share bin/hbase's config resolution.
+        # Every hbase*-binding/conf/hbase-site.xml in the vendored ycsb-0.12.0 tarball is itself a
+        # symlink to /home/ubuntu/hbase-config/hbase-site.xml — clearly the original packaging's
+        # intended shared-config location — but nothing ever creates that target, so the symlink
+        # is dangling and the client silently falls back to zookeeper.quorum=localhost, retrying
+        # forever whenever ZK isn't coincidentally co-located with wherever this script runs
+        # (master). Writing the real config there once fixes every binding via its existing
+        # symlink, uniformly, without needing to touch each binding directory individually.
+        write(os.path.join(HOME, "hbase-config", "hbase-site.xml"), hbase_site_props)
         with open(os.path.join(hbase_conf, "hbase-env.sh"), "a") as f:
             # Bugs with their own standalone ZK ensemble (has_standalone_zk) manage it themselves
             # via cluster_ctl.sh's zkServer.sh calls, so HBase must NOT also try to run one — hence

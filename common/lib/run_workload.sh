@@ -15,6 +15,15 @@ cd /home/ubuntu
 RESULTS_DIR=${RESULTS_DIR:-/results}
 mkdir -p "$RESULTS_DIR"
 
+# The daemon start scripts (start-hbase.sh etc.) resolve their own conf dir correctly, but a
+# plain `bin/hbase shell` invocation from here doesn't always pick up hbase-site.xml's rendered
+# hbase.zookeeper.quorum on every HBase version (hit this on hbase-0.94.27/hdfs-1540 — the shell
+# silently fell back to zookeeper.quorum's own default of "localhost" and retried forever).
+# Setting this explicitly makes config resolution reliable regardless of version.
+if [ -n "${HBASE_NAME:-}" ]; then
+    export HBASE_CONF_DIR="/home/ubuntu/${HBASE_NAME}/conf"
+fi
+
 target_hosts() {
     if [ "$APP_TARGET" = "master" ]; then echo "$MASTER_HOST"; else echo "$SLAVE_HOSTS"; fi
 }

@@ -120,18 +120,40 @@ collect_node_artifacts() {
     true
 }
 
+run_hbase_shell_retry() {
+    # $1 = ruby script to feed to hbase shell. HMaster may still be (re)initializing right after
+    # start-hbase.sh returns — cmd_start()'s fixed `sleep 5` isn't always enough, especially right
+    # after a fresh reformat, where meta region assignment timing varies (hit a "PleaseHoldException:
+    # Master is initializing" that the shell doesn't retry internally, silently skipping the
+    # create and leaving every subsequent op failing with TableNotFoundException). "Table already
+    # exists" is also reported as an ERROR line but isn't actually a failure, so it's excluded.
+    local script="$1" attempt output
+    for attempt in 1 2 3 4 5; do
+        output=$("/home/ubuntu/${HBASE_NAME}/bin/hbase" shell <<< "$script" 2>&1)
+        echo "$output"
+        if ! echo "$output" | grep -q "^ERROR"; then
+            return 0
+        fi
+        if echo "$output" | grep -q "TableExistsException"; then
+            return 0
+        fi
+        echo "[setup_once] hbase shell command failed (attempt $attempt/5), retrying in 10s..." >&2
+        sleep 10
+    done
+    echo "[setup_once] hbase shell command still failing after 5 attempts" >&2
+    return 1
+}
+
 setup_once() {
     case "$WORKLOAD" in
     ycsb_hbase)
-        echo "n_splits = 40
-create '${YCSB_TABLE:-ycsb}', '${YCSB_CF:-cf}', {SPLITS => (1..n_splits).map {|i| \"user#{1000+i*(9999-1000)/n_splits}\"}}" \
-            | "/home/ubuntu/${HBASE_NAME}/bin/hbase" shell
+        run_hbase_shell_retry "n_splits = 40
+create '${YCSB_TABLE:-ycsb}', '${YCSB_CF:-cf}', {SPLITS => (1..n_splits).map {|i| \"user#{1000+i*(9999-1000)/n_splits}\"}}"
         ;;
     ycsb_hbase_old)
-        echo "n_splits = 40
+        run_hbase_shell_retry "n_splits = 40
 splits = (1..n_splits).map { |i| \"user#{1000 + i * (9999 - 1000) / n_splits}\" }
-create '${YCSB_TABLE:-ycsb}', '${YCSB_CF:-cf}', splits" \
-            | "/home/ubuntu/${HBASE_NAME}/bin/hbase" shell
+create '${YCSB_TABLE:-ycsb}', '${YCSB_CF:-cf}', splits"
         ;;
     ycsb_zk)
         for host in $SLAVE_HOSTS; do
@@ -165,6 +187,10 @@ run_ycsb() {
     cd "/home/ubuntu/${YCSB_NAME}"
     case "$WORKLOAD" in
     ycsb_hbase|ycsb_hbase_old)
+        # render_config.py already writes the real config to /home/ubuntu/hbase-config/
+        # hbase-site.xml, which every hbase*-binding/conf/hbase-site.xml symlinks to — this cp is
+        # a redundant reinforcement of the same file via that symlink.
+        cp "/home/ubuntu/${HBASE_NAME}/conf/hbase-site.xml" "/home/ubuntu/${YCSB_NAME}/${YCSB_BINDING}-binding/conf/" 2>/dev/null || true
         ./bin/ycsb "$op" "${YCSB_BINDING}" -P workloads/workloada -s \
             -p recordcount="$NUM" -p table="${YCSB_TABLE:-ycsb}" -p columnfamily="${YCSB_CF:-cf}" \
             -p recordcolumn=f1 -p operationcount="$NUM" 2>&1 | tee "$RESULTS_DIR/${label}${name}.log"

@@ -47,6 +47,12 @@ reset_cluster() {
     # needed between rounds.
     echo "== resetting cluster for a fresh round =="
     /opt/lib/cluster_ctl.sh clean
+    # clean wipes /home/ubuntu/zk_storage, which is also where each ZK node's identity (myid)
+    # file lives — without regenerating it, zkServer.sh silently fails to rejoin the ensemble on
+    # the next start (no error, just no QuorumPeerMain process), and every HBase/YCSB client then
+    # retries "Connection refused" against ZK forever. extract_once() skips already-extracted
+    # tarballs, so re-running prepare here is cheap — it only re-renders config/identity files.
+    /opt/lib/cluster_ctl.sh prepare
     /opt/lib/cluster_ctl.sh format
     /opt/lib/cluster_ctl.sh start
 }

@@ -75,15 +75,20 @@ cmd_start() {
 }
 
 cmd_stop() {
+    # Every graceful stop is timeout-guarded: these are foreground daemon-stop scripts that block
+    # waiting for the target process to exit, with no bound of their own on some versions (hit a
+    # multi-minute hang on hbase-0.94.27's stop-hbase.sh waiting on an already-wedged HMaster).
+    # cmd_clean()'s unconditional `killall -9 java` right after this is the real backstop, so a
+    # timeout here just caps how long we wait for the polite version to work before it kicks in.
     [ -n "${CASSANDRA_NAME:-}" ] && [ -f /tmp/cassandra.pid ] && kill "$(cat /tmp/cassandra.pid)" 2>/dev/null || true
-    [ "${ENABLE_YARN:-0}" = "1" ] && "$(hadoop_sbin)/stop-yarn.sh" || true
-    [ -n "${HBASE_NAME:-}" ] && "/home/ubuntu/${HBASE_NAME}/bin/stop-hbase.sh" || true
+    [ "${ENABLE_YARN:-0}" = "1" ] && timeout 60 "$(hadoop_sbin)/stop-yarn.sh" || true
+    [ -n "${HBASE_NAME:-}" ] && timeout 60 "/home/ubuntu/${HBASE_NAME}/bin/stop-hbase.sh" || true
     if [ -n "${ZOOKEEPER_NAME:-}" ]; then
         for host in $SLAVE_HOSTS; do
-            ssh "$host" "cd ~/$ZOOKEEPER_NAME && ./bin/zkServer.sh stop" || true
+            ssh "$host" "cd ~/$ZOOKEEPER_NAME && timeout 60 ./bin/zkServer.sh stop" || true
         done
     fi
-    "$(hadoop_sbin)/stop-dfs.sh" || true
+    timeout 60 "$(hadoop_sbin)/stop-dfs.sh" || true
 }
 
 cmd_clean() {

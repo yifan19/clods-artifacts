@@ -30,7 +30,12 @@ cmd_format() {
     echo "== format: namenode =="
     rm -rf /tmp/hadoop-ubuntu
 
-    "$HADOOP_DIR/bin/hadoop" namenode -format -force
+    # No -force, no `yes` piping: the dir was just removed above, so format never has anything to
+    # confirm and never reads from stdin regardless of version — no interactivity to suppress in
+    # the first place. -force isn't even universally valid: hadoop-1.0.0's NameNode CLI rejects it
+    # outright (prints a Usage message and exits 0 without formatting anything, which `set -e`
+    # doesn't catch), silently leaving the storage directory missing.
+    "$HADOOP_DIR/bin/hadoop" namenode -format
     for host in $SLAVE_HOSTS; do
         ssh "$host" "rm -rf /tmp/hadoop-ubuntu"
     done

@@ -29,7 +29,7 @@ BUGS = [
         app_name="Namenode",
         app_target="master",
         num=1000000,
-        rounds=[1],
+        rounds=["baseline", 1],
         origin_cmd="master_dfsio.sh: HADOOP_NAME=hadoop-2.8.1-SNAPSHOT HBASE_NAME=hbase-1.2.5 "
                     "benchmark_ycsb_hbase.sh {add|baseline} 1 1000000 bug10_y Namenode",
         hist_root="ycsb-0.12.0", hist_prefix="bug10_y",
@@ -47,7 +47,7 @@ BUGS = [
         app_name="Namenode",
         app_target="master",
         num=1000000,
-        rounds=[1, 2],
+        rounds=["baseline", 1, 2],
         origin_cmd="master_dfsio.sh: HADOOP_NAME=hadoop-2.7.4-SNAPSHOT "
                     "benchmark_ycsb_hbase.sh {add|baseline} 1 1000000 bug3 Namenode "
                     "(HBASE_NAME/YCSB_NAME are that script's defaults, not bug-specific pins)",
@@ -67,7 +67,7 @@ BUGS = [
         app_name="Namenode",
         app_target="master",
         num=1000000,
-        rounds=[1, 2],
+        rounds=["baseline", 1, 2],
         origin_cmd="master_dfsio.sh: HADOOP_NAME=hadoop-2.8.2 "
                     "benchmark_ycsb_hbase.sh {add|baseline} 1 1000000 bug2 Namenode",
         notes="Raw r0/r2/r3 logs already exist locally in server-bugs/instrumentation_bug2 "
@@ -90,7 +90,7 @@ BUGS = [
         app_name="DataNode",
         app_target="slaves",
         num=1000000,
-        rounds=[1],
+        rounds=["baseline", 1],
         origin_cmd="master_stress.sh: HADOOP_NAME=hadoop-1.0.0 HBASE_NAME=hbase-0.94.27 "
                     "ZOOKEEPER_NAME=zookeeper-3.4.5 YCSB_BENCHMARK=hbase094 "
                     "benchmark_ycsb_hbase.sh {add|baseline} 1 1000000 1540 DataNode",
@@ -110,7 +110,7 @@ BUGS = [
         app_name="DataNode",
         app_target="slaves",
         num=1000000,
-        rounds=[1, 2],
+        rounds=["baseline", 1, 2],
         origin_cmd="master_ycsb.sh: HADOOP_NAME=hadoop-0.23.9-SNAPSHOT HBASE_NAME=hbase-1.0.0 "
                     "YCSB_BENCHMARK=hbase10 benchmark_ycsb_hbase.sh {add|baseline} 1 1000000 4205 DataNode",
         notes="FLAG: the injected symptom (server-bugs/instrumentation_hdfs4205/symptom.properties) "
@@ -134,7 +134,7 @@ BUGS = [
         app_name="Namenode",
         app_target="master",
         num=1000000,
-        rounds=[1, 2, 3, 4],
+        rounds=["baseline", 1, 2, 3, 4],
         origin_cmd="master_dfsio.sh (as 'instrumentation_bug1'): HADOOP_NAME=hadoop-2.5.2 "
                     "benchmark_ycsb_hbase.sh {add|baseline} 1 1000000 kairux_y Namenode",
         notes="Largest search space in the corpus (#SI=59 across 4 rounds) — budget more runtime.",
@@ -154,7 +154,7 @@ BUGS = [
         app_name="QuorumPeerMain",
         app_target="slaves",
         num=1000000,
-        rounds=[1, 2],
+        rounds=["baseline", 1, 2],
         origin_cmd="master_zookeeper.sh: HADOOP_NAME=hadoop-2.8.2 ZOOKEEPER_NAME=zookeeper-3.3.5-zookeeper1434 "
                     "benchmark_ycsb_zk.sh {add|baseline} 1 1000000 1435_2 QuorumPeerMain",
         notes="ZooKeeper build is a patched '-zookeeper1434' tarball, not a stock Apache release.",
@@ -174,7 +174,7 @@ BUGS = [
         app_name="QuorumPeerMain",
         app_target="slaves",
         num=1000000,
-        rounds=[1, 2, 3, 4, 5, 6],
+        rounds=["baseline", 1, 2, 3, 4, 5, 6],
         origin_cmd="master_zookeeper.sh: HADOOP_NAME=hadoop-2.8.2 ZOOKEEPER_NAME=zookeeper-3.5.0-SNAPSHOT "
                     "benchmark_ycsb_zk.sh {add|baseline} 1 1000000 1851_2 QuorumPeerMain "
                     "(commented out in the checked-in script; command shape reused from the analogous "
@@ -195,7 +195,7 @@ BUGS = [
         app_name="QuorumPeerMain",
         app_target="slaves",
         num=1000000,
-        rounds=[1, 2, 3, 4, 5, 6],
+        rounds=["baseline", 1, 2, 3, 4, 5, 6],
         origin_cmd="master_zookeeper.sh: HADOOP_NAME=hadoop-2.8.2 ZOOKEEPER_NAME=zookeeper-3.4.5 "
                     "benchmark_ycsb_zk.sh {add|baseline} 1 1000000 1900_x QuorumPeerMain",
         hist_root="ycsb-0.18.0-SNAPSHOT", hist_prefix="1900_x",
@@ -214,7 +214,7 @@ BUGS = [
         app_name="HRegionServer",
         app_target="slaves",
         num=1000000,
-        rounds=[1, 2],
+        rounds=["baseline", 1, 2],
         origin_cmd="master_hdfs_old.sh: HADOOP_NAME=hadoop-0.20.2 HBASE_NAME=hbase-0.91.0-SNAPSHOT "
                     "benchmark_ycsb_hbase_old.sh {add|baseline} 1 1000000 3403 HRegionServer",
         notes="Oldest stack in the corpus (Hadoop 0.20.2 / HBase 0.91) — expect the most manual "
@@ -234,7 +234,7 @@ BUGS = [
         app_name="QuorumPeerMain",
         app_target="slaves",
         num=1000000,
-        rounds=[1, 2, 3, 4],
+        rounds=["baseline", 1, 2, 3, 4],
         origin_cmd="master_hdfs_old.sh: HADOOP_NAME=hadoop-0.20.2 HBASE_NAME=hbase-0.91.0-hbase3627 "
                     "ZOOKEEPER_NAME=zookeeper-3.2.2 benchmark_ycsb_hbase_old.sh add 3 1000000 3627_2 QuorumPeerMain",
         notes="HBase build is a patched '-hbase3627' tarball, not a stock Apache release. "
@@ -252,7 +252,7 @@ BUGS = [
         app_name="cassandra",
         app_target="master",
         num=1000000,
-        rounds=[1, 2],
+        rounds=["baseline", 1, 2],
         origin_cmd="master_ycsb_cass.sh / benchmark_ycsb_cass.sh: CASSANDRA_NAME=apache-cassandra-3.10-SNAPSHOT "
                     "benchmark_ycsb_cass.sh {add|baseline} 1 1000000 1",
         notes="Cassandra runs on all 4 nodes (master + 3 slaves), matching the original historical "
@@ -274,7 +274,7 @@ BUGS = [
         app_target="master",
         enable_yarn=True,
         num=5,
-        rounds=[2, 3, 4],  # NB: no round 1 exists for this bug
+        rounds=["baseline", 2, 3, 4],  # NB: no round 1 exists for this bug
         origin_cmd="master_yarn.sh: HADOOP_NAME=hadoop-3.0.0-SNAPSHOT "
                     "benchmark_yarn.sh {add|baseline} 2..4 20 5  (HiBench2, workloads "
                     "micro.terasort + websearch.pagerank toggled via conf/benchmarks.lst — see "

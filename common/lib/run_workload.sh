@@ -6,7 +6,8 @@
 # from benchmark_scripts/benchmark_ycsb_hbase.sh, benchmark_ycsb_hbase_old.sh, benchmark_ycsb_zk.sh,
 # benchmark_ycsb_cass.sh, and benchmark_yarn.sh.
 #
-# Required env: WORKLOAD, NUM, APP_NAME, APP_TARGET (master|slaves), ROUNDS ("1 2 3" ...),
+# Required env: WORKLOAD, NUM, APP_NAME, APP_TARGET (master|slaves),
+#               ROUNDS ("baseline 1 2 3" ... — "baseline" is an optional sentinel, not a round number),
 #               HADOOP_NAME, SLAVE_HOSTS, RESULTS_DIR
 # Workload-specific: YCSB_NAME/YCSB_BINDING (ycsb_*), HBASE_NAME, ZOOKEEPER_NAME, CASSANDRA_NAME,
 #                     HIBENCH_NAME, ZK_NODE_CMD (ycsb_zk)
@@ -310,17 +311,20 @@ run_hibench_pair() {
 main() {
     setup_once
 
-    echo "###### baseline ######"
-    if [ "$WORKLOAD" = "hibench" ]; then
-        run_hibench_pair baseline
-    else
-        run_ycsb load baseline
-        collect_phase write baseline
-        run_ycsb run baseline
-        collect_phase read baseline
+    if [[ " $ROUNDS " == *" baseline "* ]]; then
+        echo "###### baseline ######"
+        if [ "$WORKLOAD" = "hibench" ]; then
+            run_hibench_pair baseline
+        else
+            run_ycsb load baseline
+            collect_phase write baseline
+            run_ycsb run baseline
+            collect_phase read baseline
+        fi
     fi
 
     for round in $ROUNDS; do
+        [ "$round" = "baseline" ] && continue
         echo "###### round r$round ######"
         reset_cluster
         setup_once

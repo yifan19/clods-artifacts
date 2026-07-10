@@ -21,6 +21,7 @@ This runs baseline, then rounds 1 2 of `./plans/round<N>/` (reorganized from the
 |---|---|
 | Hadoop | `hadoop-0.20.2` |
 | HBase | `hbase-0.91.0-SNAPSHOT` |
+| ZooKeeper | `zookeeper-3.2.2` |
 | YCSB | `ycsb-0.1.4` |
 | YCSB binding | `hbase` |
 

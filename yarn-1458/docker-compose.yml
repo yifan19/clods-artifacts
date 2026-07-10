@@ -20,7 +20,7 @@ services:
       APP_NAME: "Resour"
       APP_TARGET: "master"
       NUM: "5"
-      ROUNDS: "2 3 4"
+      ROUNDS: "baseline 2 3 4"
       ENABLE_YARN: "1"
       MASTER_HOST: "master"
       SLAVE_HOSTS: "slave1 slave2 slave3"

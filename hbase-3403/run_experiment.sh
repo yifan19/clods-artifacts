@@ -6,7 +6,7 @@
 #   ./run_experiment.sh
 #
 # What it does: brings up a 3-container cluster (master + slave1 + slave2) via docker compose,
-# deploys the vendored hadoop-0.20.2 + hbase-0.91.0-SNAPSHOT, formats/starts it, runs the
+# deploys the vendored hadoop-0.20.2 + hbase-0.91.0-SNAPSHOT + zookeeper-3.2.2, formats/starts it, runs the
 # baseline YCSB-vs-HBase (legacy) workload, then for each round in [1 2] injects that round's instrumentation
 # plan (from ./plans/) and reruns the workload, collecting every probe's output. Results land in
 # ./results/. Tears the cluster down at the end (pass --keep to leave it running for manual
@@ -17,6 +17,7 @@ cd "$(dirname "$0")"
 MISSING=0
 [ -f ../binaries/hadoop-0.20.2.tar.gz ] || { echo "[MISSING] binaries/hadoop-0.20.2.tar.gz (needed: hadoop_name=hadoop-0.20.2)" >&2; MISSING=1; }
 [ -f ../binaries/hbase-0.91.0-SNAPSHOT.tar.gz ] || { echo "[MISSING] binaries/hbase-0.91.0-SNAPSHOT.tar.gz (needed: hbase_name=hbase-0.91.0-SNAPSHOT)" >&2; MISSING=1; }
+[ -f ../binaries/zookeeper-3.2.2.tar.gz ] || { echo "[MISSING] binaries/zookeeper-3.2.2.tar.gz (needed: zookeeper_name=zookeeper-3.2.2)" >&2; MISSING=1; }
 [ -f ../binaries/ycsb-0.1.4.tar.gz ] || { echo "[MISSING] binaries/ycsb-0.1.4.tar.gz (needed: ycsb_name=ycsb-0.1.4)" >&2; MISSING=1; }
 if [ "$MISSING" = "1" ]; then
     echo "Refusing to start: see the [MISSING] lines above. Fetch the listed file(s) into" >&2

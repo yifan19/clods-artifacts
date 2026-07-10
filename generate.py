@@ -31,6 +31,15 @@ def tarball_name(field, value):
 
 VERSION_FIELDS = ["hadoop_name", "hbase_name", "zookeeper_name", "cassandra_name", "ycsb_name", "hibench_name"]
 
+
+def injection_rounds(bug):
+    """bug["rounds"] may include the "baseline" sentinel (tells run_workload.sh to also run an
+    uninjected baseline pass) alongside the actual numbered instrumentation rounds. Everywhere
+    that needs just the numbered rounds (README text, plans/round<N>/ counts, experimental_results
+    r<N> lookups) should go through this rather than bug["rounds"] directly.
+    """
+    return [r for r in bug["rounds"] if r != "baseline"]
+
 # Cluster topology: 1 master + N slaves. The real historical experimental_results/ .result
 # filenames encode 4 distinct slave IPs (172.31.17.254, 172.31.18.101, 172.31.25.246,
 # 172.31.26.151) — this matches that: 1 master + 3 slaves = 4 nodes total.
@@ -291,13 +300,14 @@ def render_readme(bug, missing, has_experimental=False):
             "for what's in there.\n"
         ).format(src_plans=bug["src_plans"])
 
+    rounds = injection_rounds(bug)
     return README_TMPL.format(
-        jira=bug["jira"], title=bug["title"], rounds=" ".join(map(str, bug["rounds"])),
+        jira=bug["jira"], title=bug["title"], rounds=" ".join(map(str, rounds)),
         src_plans=bug["src_plans"], version_rows="\n".join(version_rows),
         origin_cmd=bug["origin_cmd"], workload=bug["workload"], app_name=bug["app_name"],
         app_target=bug["app_target"], missing_section=missing_section, notes_section=notes_section,
         experimental_results_section=experimental_results_section,
-        n_rounds=len(bug["rounds"]),
+        n_rounds=len(rounds),
     )
 
 
@@ -320,7 +330,7 @@ def copy_experimental_results(bug, bug_dir):
     if os.path.isdir(dst_root):
         shutil.rmtree(dst_root)
     copied_any = False
-    for name in ["baseline"] + ["r%d" % r for r in bug["rounds"]]:
+    for name in ["baseline"] + ["r%d" % r for r in injection_rounds(bug)]:
         src = os.path.join(src_root, "%s_%s" % (prefix, name))
         if not os.path.isdir(src):
             continue
@@ -417,7 +427,7 @@ def generate_bug(bug):
     run_script = RUN_EXPERIMENT_TMPL.format(
         jira=bug["jira"], title=bug["title"], hadoop_name=bug.get("hadoop_name", ""),
         hbase_suffix=hbase_suffix, zk_suffix=zk_suffix, workload_label=workload_label,
-        rounds=" ".join(map(str, bug["rounds"])), missing_check=render_missing_check(bug),
+        rounds=" ".join(map(str, injection_rounds(bug))), missing_check=render_missing_check(bug),
     )
     run_path = os.path.join(bug_dir, "run_experiment.sh")
     with open(run_path, "w") as f:

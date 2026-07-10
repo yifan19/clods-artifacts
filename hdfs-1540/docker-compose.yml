@@ -20,7 +20,7 @@ services:
       APP_NAME: "DataNode"
       APP_TARGET: "slaves"
       NUM: "1000000"
-      ROUNDS: "1"
+      ROUNDS: "baseline 1"
       ENABLE_YARN: "0"
       MASTER_HOST: "master"
       SLAVE_HOSTS: "slave1 slave2 slave3"

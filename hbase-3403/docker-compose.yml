@@ -7,7 +7,7 @@ services:
     environment: &common_env
       HADOOP_NAME: "hadoop-0.20.2"
       HBASE_NAME: "hbase-0.91.0-SNAPSHOT"
-      ZOOKEEPER_NAME: ""
+      ZOOKEEPER_NAME: "zookeeper-3.2.2"
       CASSANDRA_NAME: ""
       YCSB_NAME: "ycsb-0.1.4"
       YCSB_BINDING: "hbase"
@@ -20,7 +20,7 @@ services:
       APP_NAME: "HRegionServer"
       APP_TARGET: "slaves"
       NUM: "1000000"
-      ROUNDS: "1 2"
+      ROUNDS: "baseline 1 2"
       ENABLE_YARN: "0"
       MASTER_HOST: "master"
       SLAVE_HOSTS: "slave1 slave2 slave3"

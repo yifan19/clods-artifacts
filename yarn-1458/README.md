@@ -11,9 +11,9 @@ regenerate (`python3 ../generate.py`).
 # results land in ./results/
 ```
 
-This runs baseline, then rounds 2 3 4 of `./plans/round<N>/` (reorganized from the flat
-`r<N>_<id>.properties` layout in `bm_instrument/server-bugs/instrumentation_bug5/` into `plans/round<N>/<id>.properties`
-— same layout the Android bugs use, see `final_artifact/README.md`), against the versions below.
+This runs baseline, then rounds 2 3 4 of `./plans/round<N>/<id>.properties` (populate these
+yourself from `bm_instrument/server-bugs/instrumentation_bug5/`, using the same `plans/round<N>/<id>.properties` layout
+the Android bugs use — see `final_artifact/README.md`), against the versions below.
 
 ## Versions (ground truth: `benchmark_scripts/master_*.sh`)
 
@@ -35,18 +35,12 @@ final, confirmed probe), else inspect the highest-numbered `./plans/round<N>/`.
 
 Not a YCSB/HBase bug — the only bug in this corpus driven by HiBench instead. Two ambiguous vendored tarballs exist for this exact version (hadoop-3.0.0-SNAPSHOT.tar.gz and hadoop-3.0.0-SNAPSHOT-new.tar.gz, both extract to the same 'hadoop-3.0.0-SNAPSHOT/' directory name); this manifest defaults to the non-'-new' one — see MISSING_ARTIFACTS.md.
 
-
-## Real historical run data
-
-`experimental_results/{baseline,r1,r2,...}/` holds the actual `write*.log`/`read*.log`/`*.result` files from when this bug was originally run on the real cluster (found under `~/artifacts/HiBench2/5_*` and copied in verbatim — filenames match exactly what a fresh `run_experiment.sh` produces, so you can diff old vs. new). Per-host raw `.class` dumps (`*_write_data/`, `*_read_data/`) were left out — debug artifacts, not measurement data. **You can compute Det?/Succ?/Max%/read/write/mem/lat from this folder alone, with no Docker run required**, if you just need to verify the published numbers rather than reproduce the bug fresh.
-
 ## Mapping to the results table
 
-File naming (both in `results/`, from a fresh `run_experiment.sh`, and in `experimental_results/`,
-the original historical run if present) matches `benchmark_scripts/*.sh` exactly: `write<name>.log`
-/ `read<name>.log` for the YCSB load/run phases, `write<name>_<host>.result` /
-`read<name>_<host>.result` for each host's post-phase instrumentation `collect` dump, where
-`<name>` is `baseline` or `r<N>`.
+File naming in `results/`, from a fresh `run_experiment.sh`, matches `benchmark_scripts/*.sh`
+exactly: `write<name>.log` / `read<name>.log` for the YCSB load/run phases,
+`write<name>_<host>.result` / `read<name>_<host>.result` for each host's post-phase
+instrumentation `collect` dump, where `<name>` is `baseline` or `r<N>`.
 
 - **Det?/Succ?** — check the `.result` files for the confirmed probe's value / grep the `.log`
   files for the JIRA's described symptom.

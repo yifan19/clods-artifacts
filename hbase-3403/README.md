@@ -11,9 +11,9 @@ regenerate (`python3 ../generate.py`).
 # results land in ./results/
 ```
 
-This runs baseline, then rounds 1 2 of `./plans/round<N>/` (reorganized from the flat
-`r<N>_<id>.properties` layout in `bm_instrument/server-bugs/instrumentation_hbase3403/` into `plans/round<N>/<id>.properties`
-— same layout the Android bugs use, see `final_artifact/README.md`), against the versions below.
+This runs baseline, then rounds 1 2 of `./plans/round<N>/<id>.properties` (populate these
+yourself from `bm_instrument/server-bugs/instrumentation_hbase3403/`, using the same `plans/round<N>/<id>.properties` layout
+the Android bugs use — see `final_artifact/README.md`), against the versions below.
 
 ## Versions (ground truth: `benchmark_scripts/master_*.sh`)
 
@@ -38,14 +38,12 @@ final, confirmed probe), else inspect the highest-numbered `./plans/round<N>/`.
 
 Oldest stack in the corpus (Hadoop 0.20.2 / HBase 0.91) — expect the most manual config finagling of any bug here; legacy conf/ layout.
 
-
 ## Mapping to the results table
 
-File naming (both in `results/`, from a fresh `run_experiment.sh`, and in `experimental_results/`,
-the original historical run if present) matches `benchmark_scripts/*.sh` exactly: `write<name>.log`
-/ `read<name>.log` for the YCSB load/run phases, `write<name>_<host>.result` /
-`read<name>_<host>.result` for each host's post-phase instrumentation `collect` dump, where
-`<name>` is `baseline` or `r<N>`.
+File naming in `results/`, from a fresh `run_experiment.sh`, matches `benchmark_scripts/*.sh`
+exactly: `write<name>.log` / `read<name>.log` for the YCSB load/run phases,
+`write<name>_<host>.result` / `read<name>_<host>.result` for each host's post-phase
+instrumentation `collect` dump, where `<name>` is `baseline` or `r<N>`.
 
 - **Det?/Succ?** — check the `.result` files for the confirmed probe's value / grep the `.log`
   files for the JIRA's described symptom.

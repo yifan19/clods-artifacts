@@ -5,15 +5,10 @@ Run from anywhere; paths are resolved relative to this file. Safe to re-run (ide
 overwrites generated files but never touches ../bm_instrument or ../binaries source tarballs).
 """
 import os
-import re
-import shutil
 import stat
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ARTIFACTS_ROOT = os.path.dirname(HERE)  # ~/artifacts
-SOURCE_BINARIES = os.path.join(ARTIFACTS_ROOT, "binaries")
-SOURCE_BM_INSTRUMENT = os.path.join(ARTIFACTS_ROOT, "bm_instrument")
 BINARIES_DIR = os.path.join(HERE, "binaries")
 
 sys.path.insert(0, HERE)
@@ -35,8 +30,8 @@ VERSION_FIELDS = ["hadoop_name", "hbase_name", "zookeeper_name", "cassandra_name
 def injection_rounds(bug):
     """bug["rounds"] may include the "baseline" sentinel (tells run_workload.sh to also run an
     uninjected baseline pass) alongside the actual numbered instrumentation rounds. Everywhere
-    that needs just the numbered rounds (README text, plans/round<N>/ counts, experimental_results
-    r<N> lookups) should go through this rather than bug["rounds"] directly.
+    that needs just the numbered rounds (README text, plans/round<N>/ counts) should go through
+    this rather than bug["rounds"] directly.
     """
     return [r for r in bug["rounds"] if r != "baseline"]
 
@@ -57,22 +52,9 @@ def needed_tarballs(bug):
     return out
 
 
-def ensure_symlink(tarball):
-    src = os.path.join(SOURCE_BINARIES, tarball)
+def ensure_exists(tarball):
     dst = os.path.join(BINARIES_DIR, tarball)
-    if os.path.islink(dst):
-        # A plain symlink here would carry the absolute host path (SOURCE_BINARIES) into
-        # docker-compose's `../binaries:/binaries:ro` bind mount, where that target doesn't
-        # exist (only final_artifact/binaries itself is mounted) — every tarball then reads as
-        # missing inside the containers. A hard link is a real directory entry for the same
-        # inode, so it works no matter what's mounted, with no extra disk usage.
-        os.remove(dst)
-    if os.path.exists(dst):
-        return os.path.exists(src)
-    if os.path.exists(src):
-        os.link(src, dst)
-        return True
-    return False
+    return os.path.exists(dst)
 
 
 DOCKER_COMPOSE_TMPL = """\
@@ -204,9 +186,9 @@ regenerate (`python3 ../generate.py`).
 # results land in ./results/
 ```
 
-This runs baseline, then rounds {rounds} of `./plans/round<N>/` (reorganized from the flat
-`r<N>_<id>.properties` layout in `bm_instrument/{src_plans}/` into `plans/round<N>/<id>.properties`
-— same layout the Android bugs use, see `final_artifact/README.md`), against the versions below.
+This runs baseline, then rounds {rounds} of `./plans/round<N>/<id>.properties` (populate these
+yourself from `bm_instrument/{src_plans}/`, using the same `plans/round<N>/<id>.properties` layout
+the Android bugs use — see `final_artifact/README.md`), against the versions below.
 
 ## Versions (ground truth: `benchmark_scripts/master_*.sh`)
 
@@ -223,14 +205,12 @@ Workload driver: `{workload}` (see `../common/lib/run_workload.sh`). Injected pr
 final, confirmed probe), else inspect the highest-numbered `./plans/round<N>/`.
 
 {missing_section}
-{notes_section}{experimental_results_section}
-## Mapping to the results table
+{notes_section}## Mapping to the results table
 
-File naming (both in `results/`, from a fresh `run_experiment.sh`, and in `experimental_results/`,
-the original historical run if present) matches `benchmark_scripts/*.sh` exactly: `write<name>.log`
-/ `read<name>.log` for the YCSB load/run phases, `write<name>_<host>.result` /
-`read<name>_<host>.result` for each host's post-phase instrumentation `collect` dump, where
-`<name>` is `baseline` or `r<N>`.
+File naming in `results/`, from a fresh `run_experiment.sh`, matches `benchmark_scripts/*.sh`
+exactly: `write<name>.log` / `read<name>.log` for the YCSB load/run phases,
+`write<name>_<host>.result` / `read<name>_<host>.result` for each host's post-phase
+instrumentation `collect` dump, where `<name>` is `baseline` or `r<N>`.
 
 - **Det?/Succ?** — check the `.result` files for the confirmed probe's value / grep the `.log`
   files for the JIRA's described symptom.
@@ -253,7 +233,7 @@ def render_missing_check(bug):
     return "\n".join(lines) if lines else "true"
 
 
-def render_readme(bug, missing, has_experimental=False):
+def render_readme(bug, missing):
     version_rows = []
     for field, value, tarball in needed_tarballs(bug):
         label = {
@@ -277,130 +257,26 @@ def render_readme(bug, missing, has_experimental=False):
     if bug.get("notes"):
         notes_section = "## Notes\n\n" + bug["notes"] + "\n\n"
 
-    experimental_results_section = ""
-    if bug.get("hist_root"):
-        experimental_results_section = (
-            "\n## Real historical run data\n\n"
-            "`experimental_results/{baseline,r1,r2,...}/` holds the actual `write*.log`/`read*.log`/"
-            "`*.result` files from when this bug was originally run on the real cluster (found under "
-            "`~/artifacts/%s/%s_*` and copied in verbatim — filenames match exactly what a fresh "
-            "`run_experiment.sh` produces, so you can diff old vs. new). Per-host raw `.class` dumps "
-            "(`*_write_data/`, `*_read_data/`) were left out — debug artifacts, not measurement data. "
-            "**You can compute Det?/Succ?/Max%%/read/write/mem/lat from this folder alone, with no "
-            "Docker run required**, if you just need to verify the published numbers rather than "
-            "reproduce the bug fresh.\n"
-        ) % (bug["hist_root"], bug["hist_prefix"])
-    elif has_experimental:
-        experimental_results_section = (
-            "\n## Legacy local logs\n\n"
-            "`experimental_results/legacy_local_logs/` holds files that were sitting alongside this "
-            "bug's instrumentation plans in `bm_instrument/{src_plans}/` but aren't plan files "
-            "themselves (raw logs, one-off parser scripts, etc.) — preserved here rather than "
-            "silently dropped during the plans/ reorganization; see that bug's own comments below "
-            "for what's in there.\n"
-        ).format(src_plans=bug["src_plans"])
-
     rounds = injection_rounds(bug)
     return README_TMPL.format(
         jira=bug["jira"], title=bug["title"], rounds=" ".join(map(str, rounds)),
         src_plans=bug["src_plans"], version_rows="\n".join(version_rows),
         origin_cmd=bug["origin_cmd"], workload=bug["workload"], app_name=bug["app_name"],
         app_target=bug["app_target"], missing_section=missing_section, notes_section=notes_section,
-        experimental_results_section=experimental_results_section,
         n_rounds=len(rounds),
     )
-
-
-def copy_experimental_results(bug, bug_dir):
-    """Copies the real historical result dirs (write<name>.log/read<name>.log/*.result) for this
-    bug's baseline + every round, found under ~/artifacts/<hist_root>/<hist_prefix>_<name>/, into
-    <bug_dir>/experimental_results/<name>/. Skips the bulky per-host *_write_data/*_read_data
-    subdirs (raw .class dumps of the instrumented method at attach time — debug artifacts, not
-    measurement data). Returns True if anything was copied.
-    """
-    root = bug.get("hist_root")
-    prefix = bug.get("hist_prefix")
-    if not root or not prefix:
-        return False
-    src_root = os.path.join(ARTIFACTS_ROOT, root)
-    if not os.path.isdir(src_root):
-        return False
-
-    dst_root = os.path.join(bug_dir, "experimental_results")
-    if os.path.isdir(dst_root):
-        shutil.rmtree(dst_root)
-    copied_any = False
-    for name in ["baseline"] + ["r%d" % r for r in injection_rounds(bug)]:
-        src = os.path.join(src_root, "%s_%s" % (prefix, name))
-        if not os.path.isdir(src):
-            continue
-        dst = os.path.join(dst_root, name)
-        os.makedirs(dst, exist_ok=True)
-        for fname in os.listdir(src):
-            fpath = os.path.join(src, fname)
-            if os.path.isdir(fpath):
-                continue  # skip *_write_data / *_read_data per-host class dumps
-            shutil.copy2(fpath, os.path.join(dst, fname))
-        copied_any = True
-    return copied_any
-
-
-PLAN_FILENAME_RE = re.compile(r"^r(\d+)_(-?\d+)\.properties(\.disabled)?$")
-
-
-def copy_plans(bug, bug_dir, has_experimental):
-    """Lays out plans/ as plans/round<N>/<id>.properties[.disabled] + top-level
-    plans/symptom.properties — the same layout copy_android_plans() below uses for Android bugs,
-    so both tracks are structurally identical (server-side's own source layout is flat,
-    r<N>_<id>.properties, with no round subdirectories — this reorganizes it on the way in).
-    Anything that isn't a recognized plan file (raw logs, one-off parser scripts, etc — a handful
-    of bugs' source dirs have these mixed in) is routed to experimental_results/legacy_local_logs/
-    instead of being silently dropped or left cluttering plans/.
-    """
-    plans_dir = os.path.join(bug_dir, "plans")
-    src_plans_dir = os.path.join(SOURCE_BM_INSTRUMENT, bug["src_plans"])
-    if not os.path.isdir(src_plans_dir):
-        print("!! %s: source plans dir missing: %s" % (bug["id"], src_plans_dir))
-        return has_experimental
-
-    legacy_dir = os.path.join(bug_dir, "experimental_results", "legacy_local_logs")
-    legacy_any = False
-    for fname in sorted(os.listdir(src_plans_dir)):
-        src = os.path.join(src_plans_dir, fname)
-        if not os.path.isfile(src):
-            continue
-        if fname == "symptom.properties":
-            shutil.copy2(src, os.path.join(plans_dir, "symptom.properties"))
-            continue
-        m = PLAN_FILENAME_RE.match(fname)
-        if m:
-            round_num, plan_id, disabled = m.groups()
-            round_dir = os.path.join(plans_dir, "round%s" % round_num)
-            os.makedirs(round_dir, exist_ok=True)
-            new_name = "%s.properties%s" % (plan_id, disabled or "")
-            shutil.copy2(src, os.path.join(round_dir, new_name))
-            continue
-        # not a plan file (raw log, parser script, notes, ...) — preserve it as provenance
-        os.makedirs(legacy_dir, exist_ok=True)
-        shutil.copy2(src, os.path.join(legacy_dir, fname))
-        legacy_any = True
-    return has_experimental or legacy_any
 
 
 def generate_bug(bug):
     bug_dir = os.path.join(HERE, bug["id"])
     plans_dir = os.path.join(bug_dir, "plans")
-    if os.path.isdir(plans_dir):
-        shutil.rmtree(plans_dir)  # avoid stale leftovers from a previous layout across reruns
     os.makedirs(plans_dir, exist_ok=True)
     os.makedirs(os.path.join(bug_dir, "results"), exist_ok=True)
-    has_experimental = copy_experimental_results(bug, bug_dir)
-    has_experimental = copy_plans(bug, bug_dir, has_experimental)
 
     missing = []
     os.makedirs(BINARIES_DIR, exist_ok=True)
     for field, value, tarball in needed_tarballs(bug):
-        if not ensure_symlink(tarball):
+        if not ensure_exists(tarball):
             missing.append(tarball)
 
     compose = DOCKER_COMPOSE_TMPL.format(
@@ -435,11 +311,10 @@ def generate_bug(bug):
     os.chmod(run_path, os.stat(run_path).st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
     with open(os.path.join(bug_dir, "README.md"), "w") as f:
-        f.write(render_readme(bug, missing, has_experimental))
+        f.write(render_readme(bug, missing))
 
-    print("%s: %s%s%s" % (bug["id"], "OK" if not missing else "MISSING " + ",".join(missing),
-                           "" if not missing else " <-- flagged",
-                           " [+experimental_results]" if has_experimental else ""))
+    print("%s: %s%s" % (bug["id"], "OK" if not missing else "MISSING " + ",".join(missing),
+                         "" if not missing else " <-- flagged"))
     return missing
 
 

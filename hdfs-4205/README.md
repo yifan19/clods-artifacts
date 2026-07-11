@@ -23,7 +23,10 @@ actually reproduced this — see the 4 distinct AWS IPs in `experimental_results
 `./run_experiment_aws.sh` instead: `cp hosts.env.example hosts.env`, fill in 4 real EC2 instances +
 an SSH key, then `./run_experiment_aws.sh`. Results land in `./results_aws/`. See that script's
 header comment for the full setup — it reuses every orchestration script under `../common/lib/`
-unchanged, only redoing the docker-image bootstrap against real hosts.
+unchanged, only redoing the docker-image bootstrap against real hosts. Works against both Ubuntu
+20.04 and 24.04 instances; run `./build_python2.sh` once first to populate
+`../binaries/python-2.7.18-ubuntu24.04-x86_64.tar.gz` (a from-source Python 2.7.18 build, since
+24.04 no longer packages python2 at all — see `run_experiment_aws.sh`'s "OS note").
 
 ## Versions (ground truth: `benchmark_scripts/master_*.sh`)
 

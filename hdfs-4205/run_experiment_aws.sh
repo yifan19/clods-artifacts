@@ -21,13 +21,17 @@
 #      simplest — see hosts.env.example's comment on why).
 #   3. ./run_experiment_aws.sh
 #
-# OS note: unlike ../common/Dockerfile's base image, this only ever installs python3 — nothing here
-# actually needs python2 (node_prepare.sh invokes render_config.py via `python3` explicitly; the
-# vendored tarballs' own `.py` files, e.g. zookeeper-3.4.6's src/contrib/, are unused source-only
-# extras, never invoked by any script this runs). Dockerfile's python2.7 was there defensively for
-# an ubuntu:20.04 base and was never actually exercised — moot here, and 24.04 doesn't package
-# python2 at all (confirmed: no apt candidate). openjdk-8-jdk, by contrast, IS confirmed available
-# via apt on both 20.04 and 24.04 (universe repo) — no special-casing needed there either.
+# OS note: ../common/Dockerfile's base image gets python2 from apt (ubuntu:20.04 still packages
+# it) and symlinks /usr/bin/python2 + /usr/bin/python to it. 24.04 dropped python2 packaging
+# entirely (confirmed: no apt candidate), so this instead deploys a vendored, from-source Python
+# 2.7.18 build (see ./build_python2.sh, ../binaries/python-2.7.18-ubuntu24.04-x86_64.tar.gz) and
+# symlinks the same two paths to it — same end state on every OS version, not dependent on whatever
+# a given distro still happens to carry. Nothing this script actually runs calls python2 itself
+# (node_prepare.sh invokes render_config.py via `python3` explicitly; the vendored tarballs' own
+# `.py` files, e.g. zookeeper-3.4.6's src/contrib/, are unused source-only extras) — this is purely
+# defensive parity with the Docker image, in case some vendored old script silently expects a bare
+# `python`/`python2` to resolve to Python 2 semantics. openjdk-8-jdk, by contrast, IS confirmed
+# available via apt on both 20.04 and 24.04 (universe repo) — no vendoring needed there.
 #
 # Results land in ./results_aws/ (kept separate from run_experiment.sh's ./results/). Cluster
 # daemons are stopped at the end (pass --keep to leave them running for manual inspection); the EC2
@@ -54,6 +58,7 @@ MISSING=0
 [ -f ../binaries/hbase-1.0.0.tar.gz ] || { echo "[MISSING] binaries/hbase-1.0.0.tar.gz" >&2; MISSING=1; }
 [ -f ../binaries/zookeeper-3.4.6.tar.gz ] || { echo "[MISSING] binaries/zookeeper-3.4.6.tar.gz" >&2; MISSING=1; }
 [ -f ../binaries/ycsb-0.12.0.tar.gz ] || { echo "[MISSING] binaries/ycsb-0.12.0.tar.gz" >&2; MISSING=1; }
+[ -f ../binaries/python-2.7.18-ubuntu24.04-x86_64.tar.gz ] || { echo "[MISSING] binaries/python-2.7.18-ubuntu24.04-x86_64.tar.gz (run ./build_python2.sh)" >&2; MISSING=1; }
 if [ "$MISSING" = "1" ]; then
     echo "Refusing to start: see the [MISSING] lines above. Fetch the listed file(s) into" >&2
     echo "final_artifact/binaries/ (see ../MISSING_ARTIFACTS.md), then re-run this script." >&2
@@ -147,8 +152,16 @@ for host in $ALL_HOSTS; do
     scp -q "${ssh_opts[@]}" \
         ../binaries/hadoop-0.23.9-SNAPSHOT.tar.gz ../binaries/hbase-1.0.0.tar.gz \
         ../binaries/zookeeper-3.4.6.tar.gz ../binaries/ycsb-0.12.0.tar.gz \
+        ../binaries/python-2.7.18-ubuntu24.04-x86_64.tar.gz \
         "${SSH_USER}@${host}:/binaries/"
     scp -rq "${ssh_opts[@]}" ./plans/* "${SSH_USER}@${host}:/plans/"
+    # See the "OS note" above: gives every host the same /usr/bin/python2 + /usr/bin/python as
+    # ../common/Dockerfile's image, regardless of what (if anything) that OS version's apt carries.
+    remote "$host" '
+        sudo tar xzf /binaries/python-2.7.18-ubuntu24.04-x86_64.tar.gz -C /opt/
+        sudo ln -sf /opt/python2.7.18/bin/python2.7 /usr/bin/python2
+        sudo ln -sf /opt/python2.7.18/bin/python2.7 /usr/bin/python
+    '
 done
 
 echo "== [4/6] writing per-host environment (../common/entrypoint.sh's trick, for real sshd) =="

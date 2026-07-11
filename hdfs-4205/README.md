@@ -34,7 +34,7 @@ unchanged, only redoing the docker-image bootstrap against real hosts. Works aga
 |---|---|
 | Hadoop | `hadoop-0.23.9-SNAPSHOT` |
 | HBase | `hbase-1.0.0` |
-| ZooKeeper | `zookeeper-3.4.6` **[MISSING — see MISSING_ARTIFACTS.md]** |
+| ZooKeeper | `zookeeper-3.4.6` |
 | YCSB | `ycsb-0.12.0` |
 | YCSB binding | `hbase10` |
 
@@ -45,12 +45,6 @@ unchanged, only redoing the docker-image bootstrap against real hosts. Works aga
 Workload driver: `ycsb_hbase` (see `../common/lib/run_workload.sh`). Injected process:
 `DataNode` on **slaves**. Symptom probe: `./plans/symptom.properties` if present (the
 final, confirmed probe), else inspect the highest-numbered `./plans/round<N>/`.
-
-## ⚠️ Missing artifacts
-
-This bug cannot run until these are fetched into `final_artifact/binaries/` (see `../MISSING_ARTIFACTS.md`):
-
-- `zookeeper-3.4.6.tar.gz`
 
 
 ## Notes

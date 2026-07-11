@@ -14,12 +14,20 @@
 # into the image is redone here against real hosts.
 #
 # Setup:
-#   1. Launch 4 EC2 instances (plain Ubuntu 20.04, matching ../common/Dockerfile's base), all in one
+#   1. Launch 4 EC2 instances (plain Ubuntu — 20.04 or 24.04, both confirmed below), all in one
 #      security group that allows all TCP traffic between its own members (HDFS/HBase/ZooKeeper use
 #      several ports; easiest to just open them all to each other rather than enumerate every one).
 #   2. cp hosts.env.example hosts.env, fill in your 4 real hosts + SSH key (same key on all 4 is
 #      simplest — see hosts.env.example's comment on why).
 #   3. ./run_experiment_aws.sh
+#
+# OS note: unlike ../common/Dockerfile's base image, this only ever installs python3 — nothing here
+# actually needs python2 (node_prepare.sh invokes render_config.py via `python3` explicitly; the
+# vendored tarballs' own `.py` files, e.g. zookeeper-3.4.6's src/contrib/, are unused source-only
+# extras, never invoked by any script this runs). Dockerfile's python2.7 was there defensively for
+# an ubuntu:20.04 base and was never actually exercised — moot here, and 24.04 doesn't package
+# python2 at all (confirmed: no apt candidate). openjdk-8-jdk, by contrast, IS confirmed available
+# via apt on both 20.04 and 24.04 (universe repo) — no special-casing needed there either.
 #
 # Results land in ./results_aws/ (kept separate from run_experiment.sh's ./results/). Cluster
 # daemons are stopped at the end (pass --keep to leave them running for manual inspection); the EC2
@@ -92,8 +100,15 @@ for host in $ALL_HOSTS; do
     echo "-- $host --"
     remote "$host" '
         set -e
-        sudo apt-get update -qq
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+        # NEEDRESTART_SUSPEND: Ubuntu 22.04+/24.04'"'"'s stock AMIs ship needrestart, which by
+        # default pauses apt-get with an interactive "which services should be restarted?" prompt —
+        # fatal here since this whole block runs over a non-interactive `ssh host "..."` with no
+        # tty to answer it. DEBIAN_FRONTEND=noninteractive alone does not suppress this (needrestart
+        # is a separate dpkg hook, not a debconf frontend). Harmless on 20.04, which lacks the
+        # package entirely.
+        export NEEDRESTART_SUSPEND=1
+        sudo -E apt-get update -qq
+        sudo -E DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
             openjdk-8-jdk openssh-server python3 net-tools iproute2 procps psmisc curl >/dev/null
         sudo mkdir -p /opt/lib /binaries /plans /data /results
         sudo chown -R "$(whoami)":"$(whoami)" /opt/lib /binaries /plans /data /results

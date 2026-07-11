@@ -1,26 +1,19 @@
 #!/usr/bin/env python3
 """Materializes final_artifact/element-<bug>/ for every bug in manifest_android.py.
 
-Run from anywhere; paths are resolved relative to this file. Safe to re-run (idempotent).
+Run from anywhere; paths are resolved relative to this file. Safe to re-run (idempotent,
+overwrites generated files but never touches ../bm_instrument). Does not manage `plans/` or
+`experimental_results/` content — populate `plans/round<N>/` and `apk/` yourself; this only ever
+checks whether the expected APK is already there.
 """
 import os
-import re
-import shutil
 import stat
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ARTIFACTS_ROOT = os.path.dirname(HERE)
-SOURCE_BM_INSTRUMENT = os.path.join(ARTIFACTS_ROOT, "bm_instrument")
 
 sys.path.insert(0, HERE)
 from manifest_android import BUGS, UNPACKAGEABLE  # noqa: E402
-
-# e.g. "1_44_instrumentation.properties" / "9_-1_instrumentation.properties.disabled" — leading
-# digit is a round-prefix (redundant with the containing round<N>/ dir, sometimes even
-# inconsistent with it — see element7643/round7/8_9_instrumentation.properties.disabled — so it's
-# discarded rather than trusted) and the id is what actually matters.
-ANDROID_PLAN_FILENAME_RE = re.compile(r"^-?\d+_(-?\d+)_instrumentation\.properties(\.disabled)?$")
 
 RUN_EXPERIMENT_TMPL = """\
 #!/bin/bash
@@ -122,16 +115,12 @@ Full commit provenance (root-cause commit(s) reverted, instrumentation commit(s)
 ## What's in this folder
 
 - `apk/vector-gplay-arm64-v8a-debug.apk` — the actual pre-built, working APK this bug was captured
-  against (symlinked from `bm_instrument/element-bugs/{folder}/results/`).
+  against. Not included here; fetch it yourself (see `../ANDROID_README.md`) and place it at this
+  path.
 - `plans/round1/`, `plans/round2/`, ... — this bug's instrumentation plans, as
   `round<N>/<id>.properties[.disabled]` — same layout the server-side bugs use (see
-  `final_artifact/README.md`'s "Instrumentation plan layout"), reorganized from the original
-  `<round>_<id>_instrumentation.properties` naming. `plans/symptom.properties` (top level) is the
-  final, confirmed probe — verified byte-identical across every round in the original data, so it's
-  de-duplicated to one copy here rather than repeated per round.
-- `experimental_results/` — the real historical logcat captures (`baseline.txt`, `round1.txt`, ...)
-  from when this bug was originally run. **You can check Det?/Succ? from this alone, no device
-  needed** — grep for `DEADBEEF`/`CLODS` and compare round-over-round.
+  `final_artifact/README.md`'s "Instrumentation plan layout"). `plans/symptom.properties` (top
+  level) is the final, confirmed probe.
 - `results/` — populated by `run_experiment.sh` on a fresh run.
 {notes_section}
 ## How `run_experiment.sh` reproduces each round
@@ -155,8 +144,8 @@ Full commit provenance (root-cause commit(s) reverted, instrumentation commit(s)
 
 ## Mapping to the results table
 
-- **Det?/Succ?** — grep `experimental_results/round<N>.txt` (or a fresh `results/round<N>.log`)
-  for `DEADBEEF`/`CLODS` matching the symptom probe above.
+- **Det?/Succ?** — grep a fresh `results/round<N>.log` for `DEADBEEF`/`CLODS` matching the
+  symptom probe above.
 - **#Iter** = {n_rounds} (rounds {rounds}).
 - **#SI** = count of `.properties` files under `plans/round<N>/` (excluding `.disabled`), summed
   across rounds.
@@ -171,67 +160,12 @@ def generate_bug(bug):
     bug_dir = os.path.join(HERE, bug["id"])
     plans_dir = os.path.join(bug_dir, "plans")
     apk_dir = os.path.join(bug_dir, "apk")
-    if os.path.isdir(plans_dir):
-        shutil.rmtree(plans_dir)  # avoid stale leftovers from a previous layout/round-list
     os.makedirs(plans_dir, exist_ok=True)
     os.makedirs(apk_dir, exist_ok=True)
     os.makedirs(os.path.join(bug_dir, "results"), exist_ok=True)
 
-    src_bug_dir = os.path.join(SOURCE_BM_INSTRUMENT, "element-bugs", bug["folder"])
-
-    # plans/round<N>/<id>.properties[.disabled] + top-level plans/symptom.properties — same
-    # layout copy_plans() in ../generate.py uses for the server-side bugs. Source layout here is
-    # <round-prefix>_<id>_instrumentation.properties[.disabled] inside round<N>/ dirs already; this
-    # strips the redundant round-prefix and "_instrumentation" suffix and de-dupes symptom.properties
-    # (verified byte-identical across every round for all 5 bugs) up to the top level.
-    symptom_written = False
-    for r in bug["rounds"]:
-        src_round = os.path.join(src_bug_dir, "round%d" % r)
-        dst_round = os.path.join(plans_dir, "round%d" % r)
-        if os.path.isdir(dst_round):
-            shutil.rmtree(dst_round)
-        if not os.path.isdir(src_round):
-            print("!! %s: missing round dir %s" % (bug["id"], src_round))
-            continue
-        os.makedirs(dst_round, exist_ok=True)
-        for fname in sorted(os.listdir(src_round)):
-            src = os.path.join(src_round, fname)
-            if not os.path.isfile(src):
-                continue
-            if fname == "symptom.properties":
-                if not symptom_written:
-                    shutil.copy2(src, os.path.join(plans_dir, "symptom.properties"))
-                    symptom_written = True
-                continue
-            m = ANDROID_PLAN_FILENAME_RE.match(fname)
-            if m:
-                plan_id, disabled = m.groups()
-                new_name = "%s.properties%s" % (plan_id, disabled or "")
-                shutil.copy2(src, os.path.join(dst_round, new_name))
-            else:
-                # not a recognized plan file — preserve as-is rather than silently drop
-                shutil.copy2(src, os.path.join(dst_round, fname))
-
-    # apk/ — symlink (these are ~70-90MB each; avoid duplicating on disk)
-    src_apk = os.path.join(src_bug_dir, bug["apk"])
     dst_apk = os.path.join(apk_dir, "vector-gplay-arm64-v8a-debug.apk")
-    apk_missing = not os.path.exists(src_apk)
-    if not apk_missing and not os.path.exists(dst_apk):
-        os.symlink(src_apk, dst_apk)
-
-    # experimental_results/ — real historical logcat captures
-    src_results = os.path.join(src_bug_dir, "results")
-    dst_exp = os.path.join(bug_dir, "experimental_results")
-    if os.path.isdir(dst_exp):
-        shutil.rmtree(dst_exp)
-    has_experimental = False
-    if os.path.isdir(src_results):
-        os.makedirs(dst_exp, exist_ok=True)
-        for fname in os.listdir(src_results):
-            fpath = os.path.join(src_results, fname)
-            if os.path.isfile(fpath) and not fname.endswith(".apk"):
-                shutil.copy2(fpath, os.path.join(dst_exp, fname))
-                has_experimental = True
+    apk_missing = not os.path.exists(dst_apk)
 
     notes_section = ""
     if bug.get("notes"):
@@ -255,7 +189,7 @@ def generate_bug(bug):
         ))
 
     status = "MISSING APK" if apk_missing else "OK"
-    print("%s: %s%s" % (bug["id"], status, " [+experimental_results]" if has_experimental else ""))
+    print("%s: %s" % (bug["id"], status))
     return apk_missing
 
 

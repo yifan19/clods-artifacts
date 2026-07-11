@@ -28,16 +28,12 @@ Full commit provenance (root-cause commit(s) reverted, instrumentation commit(s)
 ## What's in this folder
 
 - `apk/vector-gplay-arm64-v8a-debug.apk` — the actual pre-built, working APK this bug was captured
-  against (symlinked from `bm_instrument/element-bugs/element6782/results/`).
+  against. Not included here; fetch it yourself (see `../ANDROID_README.md`) and place it at this
+  path.
 - `plans/round1/`, `plans/round2/`, ... — this bug's instrumentation plans, as
   `round<N>/<id>.properties[.disabled]` — same layout the server-side bugs use (see
-  `final_artifact/README.md`'s "Instrumentation plan layout"), reorganized from the original
-  `<round>_<id>_instrumentation.properties` naming. `plans/symptom.properties` (top level) is the
-  final, confirmed probe — verified byte-identical across every round in the original data, so it's
-  de-duplicated to one copy here rather than repeated per round.
-- `experimental_results/` — the real historical logcat captures (`baseline.txt`, `round1.txt`, ...)
-  from when this bug was originally run. **You can check Det?/Succ? from this alone, no device
-  needed** — grep for `DEADBEEF`/`CLODS` and compare round-over-round.
+  `final_artifact/README.md`'s "Instrumentation plan layout"). `plans/symptom.properties` (top
+  level) is the final, confirmed probe.
 - `results/` — populated by `run_experiment.sh` on a fresh run.
 
 ## How `run_experiment.sh` reproduces each round
@@ -61,8 +57,8 @@ Full commit provenance (root-cause commit(s) reverted, instrumentation commit(s)
 
 ## Mapping to the results table
 
-- **Det?/Succ?** — grep `experimental_results/round<N>.txt` (or a fresh `results/round<N>.log`)
-  for `DEADBEEF`/`CLODS` matching the symptom probe above.
+- **Det?/Succ?** — grep a fresh `results/round<N>.log` for `DEADBEEF`/`CLODS` matching the
+  symptom probe above.
 - **#Iter** = 2 (rounds 1 2).
 - **#SI** = count of `.properties` files under `plans/round<N>/` (excluding `.disabled`), summed
   across rounds.

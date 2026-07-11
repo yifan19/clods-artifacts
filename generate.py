@@ -360,8 +360,14 @@ def copy_plans(bug, bug_dir, has_experimental):
     plans_dir = os.path.join(bug_dir, "plans")
     src_plans_dir = os.path.join(SOURCE_BM_INSTRUMENT, bug["src_plans"])
     if not os.path.isdir(src_plans_dir):
-        print("!! %s: source plans dir missing: %s" % (bug["id"], src_plans_dir))
+        # bm_instrument/ isn't checked into this repo — once it's gone from disk there's nothing
+        # to re-import from, so leave the already-generated plans/ untouched rather than wiping it.
+        print("-- %s: bm_instrument/ source not present, leaving existing plans/ as-is" % bug["id"])
         return has_experimental
+
+    if os.path.isdir(plans_dir):
+        shutil.rmtree(plans_dir)  # avoid stale leftovers from a previous layout across reruns
+    os.makedirs(plans_dir, exist_ok=True)
 
     legacy_dir = os.path.join(bug_dir, "experimental_results", "legacy_local_logs")
     legacy_any = False
@@ -390,8 +396,6 @@ def copy_plans(bug, bug_dir, has_experimental):
 def generate_bug(bug):
     bug_dir = os.path.join(HERE, bug["id"])
     plans_dir = os.path.join(bug_dir, "plans")
-    if os.path.isdir(plans_dir):
-        shutil.rmtree(plans_dir)  # avoid stale leftovers from a previous layout across reruns
     os.makedirs(plans_dir, exist_ok=True)
     os.makedirs(os.path.join(bug_dir, "results"), exist_ok=True)
     has_experimental = copy_experimental_results(bug, bug_dir)

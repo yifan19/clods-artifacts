@@ -58,6 +58,20 @@ git clone source-bundles/dex2jar.bundle android-common/dex2jar-src
 | `dex2jar.bundle` | `~/artifacts/dex2jar` | full upstream history incl. tags `v2.3`, `v2.4` | No — `--source` only |
 | `ARTTI_instrument.bundle` | `~/artifacts/ARTTI_instrument` | `main` | No — `--source` only |
 
+### `common/bm_instrument-src.tar.gz` — a small, git-tracked exception
+
+Unlike everything else in this section, `common/bm_instrument-src.tar.gz` **is** committed to git
+directly (it isn't caught by the `/common/bm_instrument-src/` ignore rule above, which only matches
+that directory name, not a same-named `.tar.gz`). It's a plain working-tree snapshot of
+`common/bm_instrument-src` — no `.git` history, ~10 KB — kept small on purpose so `USER_GUIDE.md`
+(the tool's build/run/output-format guide) and `scripts/parse_bm_data.py` (parses the raw `/data`
+ring-buffer output the tool produces, including the stack-trace hashtable — see the guide's §7/§8)
+reach a fresh clone without anyone having to run `fetch_data.sh` or have access to the
+`bm_instrument.bundle` source first. `common/lib/parse_bm_data.py` is the same script, duplicated
+there so it's directly runnable against a bug's `results/*_data/` output without unpacking the
+tarball at all. Re-tar it (`tar czf common/bm_instrument-src.tar.gz -C common bm_instrument-src`)
+after editing anything under `common/bm_instrument-src/`, or it'll silently go stale.
+
 A `git bundle` is a single-file, clone-able snapshot of an entire repo (`git bundle create X --all`
 / `git clone X`) — this is what "archiving a git repo with its `.git` information" means in
 practice: unlike a tarball of the working tree, it preserves every commit, branch, and tag, and a

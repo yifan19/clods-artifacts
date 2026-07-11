@@ -15,6 +15,16 @@ This runs baseline, then rounds 1 2 of `./plans/round<N>/<id>.properties` (popul
 yourself from `bm_instrument/server-bugs/instrumentation_hdfs4205/`, using the same `plans/round<N>/<id>.properties` layout
 the Android bugs use — see `final_artifact/README.md`), against the versions below.
 
+### Reproduce on a real 4-node AWS cluster instead
+
+`run_experiment.sh` runs all 4 nodes as docker-compose containers sharing one host. If you want to
+rule out that simplification (real host/network isolation is how the original historical run
+actually reproduced this — see the 4 distinct AWS IPs in `experimental_results/`), use
+`./run_experiment_aws.sh` instead: `cp hosts.env.example hosts.env`, fill in 4 real EC2 instances +
+an SSH key, then `./run_experiment_aws.sh`. Results land in `./results_aws/`. See that script's
+header comment for the full setup — it reuses every orchestration script under `../common/lib/`
+unchanged, only redoing the docker-image bootstrap against real hosts.
+
 ## Versions (ground truth: `benchmark_scripts/master_*.sh`)
 
 | Component | Version |

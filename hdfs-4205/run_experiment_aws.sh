@@ -116,6 +116,12 @@ for host in $ALL_HOSTS; do
         sudo -E DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
             openjdk-8-jdk openssh-server python3 net-tools iproute2 procps psmisc curl >/dev/null
         sudo mkdir -p /opt/lib /binaries /plans /data /results
+        # Non-recursive: only the /opt dir entry itself needs to be writable, so scp can create
+        # /opt/blameMasterInstrument.jar and the vendored python2 tarball can extract to
+        # /opt/python2.7.18 directly (both placed as this user, not via sudo) below --
+        # deliberately not -R here so any pre-existing root-owned stuff under /opt (e.g. from
+        # apt packages) keeps its ownership.
+        sudo chown "$(whoami)":"$(whoami)" /opt
         sudo chown -R "$(whoami)":"$(whoami)" /opt/lib /binaries /plans /data /results
         sudo sed -i "s/#\?PermitUserEnvironment.*/PermitUserEnvironment yes/" /etc/ssh/sshd_config
         grep -q "^PermitUserEnvironment yes" /etc/ssh/sshd_config || \

@@ -1,0 +1,45 @@
+diff --git a/src/main/java/org/apache/hadoop/hbase/client/HTablePool.java b/src/main/java/org/apache/hadoop/hbase/client/HTablePool.java
+index 01e6bbd..05016e5 100755
+--- a/src/main/java/org/apache/hadoop/hbase/client/HTablePool.java
++++ b/src/main/java/org/apache/hadoop/hbase/client/HTablePool.java
+@@ -255,7 +255,7 @@ public class HTablePool implements Closeable {
+     String tableName = Bytes.toString(table.getTableName());
+     if (tables.size(tableName) >= maxSize) {
+       // release table instance since we're not reusing it
+-      this.tables.remove(tableName, table);
++      this.tables.removeValue(tableName, table);
+       this.tableFactory.releaseHTableInterface(table);
+       return;
+     }
+diff --git a/src/main/java/org/apache/hadoop/hbase/mapreduce/hadoopbackport/InputSampler.java b/src/main/java/org/apache/hadoop/hbase/mapreduce/hadoopbackport/InputSampler.java
+index c998c1a..516bbd3 100644
+--- a/src/main/java/org/apache/hadoop/hbase/mapreduce/hadoopbackport/InputSampler.java
++++ b/src/main/java/org/apache/hadoop/hbase/mapreduce/hadoopbackport/InputSampler.java
+@@ -351,7 +351,7 @@ public class InputSampler<K,V> extends Configured implements Tool  {
+     final InputFormat inf =
+         ReflectionUtils.newInstance(job.getInputFormatClass(), conf);
+     int numPartitions = job.getNumReduceTasks();
+-    K[] samples = sampler.getSample(inf, job);
++    K[] samples = (K[]) sampler.getSample(inf, job);
+     LOG.info("Using " + samples.length + " samples");
+     RawComparator<K> comparator =
+       (RawComparator<K>) job.getSortComparator();
+diff --git a/src/main/java/org/apache/hadoop/hbase/util/PoolMap.java b/src/main/java/org/apache/hadoop/hbase/util/PoolMap.java
+index 1956e6b..1b6e1c8 100644
+--- a/src/main/java/org/apache/hadoop/hbase/util/PoolMap.java
++++ b/src/main/java/org/apache/hadoop/hbase/util/PoolMap.java
+@@ -86,12 +86,12 @@ public class PoolMap<K, V> implements Map<K, V> {
+   public V remove(Object key) {
+     Pool<V> pool = pools.remove(key);
+     if (pool != null) {
+-      remove((K) key, pool.get());
++      removeValue((K) key, pool.get());
+     }
+     return null;
+   }
+ 
+-  public boolean remove(K key, V value) {
++  public boolean removeValue(K key, V value) {
+     Pool<V> pool = pools.get(key);
+     boolean res = false;
+     if (pool != null) {

@@ -6,11 +6,11 @@ services:
     hostname: master
     environment: &common_env
       HADOOP_NAME: "hadoop-0.23.9-SNAPSHOT"
-      HBASE_NAME: "hbase-1.0.0"
+      HBASE_NAME: "hbase-0.94.27-hadoop023"
       ZOOKEEPER_NAME: "zookeeper-3.4.6"
       CASSANDRA_NAME: ""
       YCSB_NAME: "ycsb-0.12.0"
-      YCSB_BINDING: "hbase10"
+      YCSB_BINDING: "hbase094"
       YCSB_TABLE: "ycsb"
       YCSB_CF: "cf"
       HIBENCH_NAME: ""

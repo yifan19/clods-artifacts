@@ -6,7 +6,7 @@
 #   ./run_experiment.sh
 #
 # What it does: brings up a 3-container cluster (master + slave1 + slave2) via docker compose,
-# deploys the vendored hadoop-0.23.9-SNAPSHOT + hbase-1.0.0 + zookeeper-3.4.6, formats/starts it, runs the
+# deploys the vendored hadoop-0.23.9-SNAPSHOT + hbase-0.94.27-hadoop023 + zookeeper-3.4.6, formats/starts it, runs the
 # baseline YCSB-vs-HBase workload, then for each round in [1 2] injects that round's instrumentation
 # plan (from ./plans/) and reruns the workload, collecting every probe's output. Results land in
 # ./results/. Tears the cluster down at the end (pass --keep to leave it running for manual
@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 
 MISSING=0
 [ -f ../binaries/hadoop-0.23.9-SNAPSHOT.tar.gz ] || { echo "[MISSING] binaries/hadoop-0.23.9-SNAPSHOT.tar.gz (needed: hadoop_name=hadoop-0.23.9-SNAPSHOT)" >&2; MISSING=1; }
-[ -f ../binaries/hbase-1.0.0.tar.gz ] || { echo "[MISSING] binaries/hbase-1.0.0.tar.gz (needed: hbase_name=hbase-1.0.0)" >&2; MISSING=1; }
+[ -f ../binaries/hbase-0.94.27-hadoop023.tar.gz ] || { echo "[MISSING] binaries/hbase-0.94.27-hadoop023.tar.gz (needed: hbase_name=hbase-0.94.27-hadoop023)" >&2; MISSING=1; }
 [ -f ../binaries/zookeeper-3.4.6.tar.gz ] || { echo "[MISSING] binaries/zookeeper-3.4.6.tar.gz (needed: zookeeper_name=zookeeper-3.4.6)" >&2; MISSING=1; }
 [ -f ../binaries/ycsb-0.12.0.tar.gz ] || { echo "[MISSING] binaries/ycsb-0.12.0.tar.gz (needed: ycsb_name=ycsb-0.12.0)" >&2; MISSING=1; }
 if [ "$MISSING" = "1" ]; then

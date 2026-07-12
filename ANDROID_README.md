@@ -81,3 +81,6 @@ and `android-common/` vendors everything else needed for the offline patching st
 
 `element-5038`'s results-table row is labeled **"5132"** — that's the upstream PR number that got
 reverted to *create* the bug, not this bug's own issue number. Don't look for `element-5132`.
+
+For a phone+server, step-by-step walkthrough of all 5 bugs (including this one, consistently
+labeled `5132` there to match the results table) see `EXPERIMENT_GUIDE.md`.

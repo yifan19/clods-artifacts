@@ -6,6 +6,8 @@ already set up:
 - **This document** — server-side (HDFS, ZooKeeper, HBase, Cassandra, YARN), Docker-based.
 - **`ANDROID_README.md`** — the 5 Android (Element) bugs, offline dex2jar-based patching + Docker
   for the build step, `adb` + a connected device for the on-device step.
+- **`EXPERIMENT_GUIDE.md`** — phone + self-hosted-homeserver walkthrough for all 5 Android bugs
+  (a self-signed-CA HTTPS setup that needs no registered domain, plus per-bug run steps).
 
 ## Server-side track
 

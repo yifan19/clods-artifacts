@@ -50,3 +50,8 @@ docker compose logs -f synapse     # tail logs (stdout, unlike the venv path's l
 docker compose restart synapse     # after editing data/homeserver.yaml
 docker compose down                # stop everything
 ```
+
+## Building one tagged image per bug, real domain + Let's Encrypt
+
+For standing up per-bug images (`element-7516` needs an old server version, the rest don't) and
+handing evaluators a real HTTPS domain instead of a self-signed CA, see `PER_BUG_BUILD_GUIDE.md`.

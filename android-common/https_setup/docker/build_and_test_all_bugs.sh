@@ -65,19 +65,15 @@ for bug in "${ALL_TAGS[@]}"; do
     NAME="clods-synapse-test-$bug"
     docker rm -f "$NAME" >/dev/null 2>&1 || true
 
-    # -e UID=0 -e GID=0 on both steps: `generate` mode's chown of newly-created files is
-    # non-recursive (only /data itself, not its contents -- see docker/start.py's
-    # run_generate_config), but `run` mode unconditionally gosu-drops to UID 991 whenever no
-    # explicit UID/GID is given. Left at defaults, that combination is broken out of the box
-    # (signing key etc. end up root-owned, then the actual synapse process can't read them).
-    # Pinning both steps to root sidesteps that mismatch instead of chasing it per-image.
+    # Default UID/GID (no override): generate+run both land on 991 now that docker/start.py's
+    # run_generate_config chowns recursively *after* generation instead of non-recursively
+    # before it -- fixed upstream on all 4 branches (develop/element-516/bug10/element-7516),
+    # was previously worked around here with -e UID=0 -e GID=0.
     docker run --rm -v "$DATA_DIR:/data" \
         -e SYNAPSE_SERVER_NAME="test-$bug.invalid" -e SYNAPSE_REPORT_STATS=no \
-        -e UID=0 -e GID=0 \
         "clods-synapse:$bug" generate >/dev/null
 
     docker run -d --name "$NAME" -p "$TEST_PORT:8008" -v "$DATA_DIR:/data" \
-        -e UID=0 -e GID=0 \
         "clods-synapse:$bug" >/dev/null
 
     OK=0
@@ -100,7 +96,8 @@ for bug in "${ALL_TAGS[@]}"; do
     docker rm -f "$NAME" >/dev/null 2>&1 || true
 done
 
-# root-owned (UID=0 inside the containers above) -- plain rm can't touch these
+# owned by UID 991 (the containers' default non-root user, not the host's) -- still not
+# the invoking host user, so plain rm can't touch these
 sudo rm -rf "$WORKDIR"
 
 echo

@@ -65,11 +65,20 @@ for bug in "${ALL_TAGS[@]}"; do
     NAME="clods-synapse-test-$bug"
     docker rm -f "$NAME" >/dev/null 2>&1 || true
 
+    # -e UID=0 -e GID=0 on both steps: `generate` mode's chown of newly-created files is
+    # non-recursive (only /data itself, not its contents -- see docker/start.py's
+    # run_generate_config), but `run` mode unconditionally gosu-drops to UID 991 whenever no
+    # explicit UID/GID is given. Left at defaults, that combination is broken out of the box
+    # (signing key etc. end up root-owned, then the actual synapse process can't read them).
+    # Pinning both steps to root sidesteps that mismatch instead of chasing it per-image.
     docker run --rm -v "$DATA_DIR:/data" \
         -e SYNAPSE_SERVER_NAME="test-$bug.invalid" -e SYNAPSE_REPORT_STATS=no \
+        -e UID=0 -e GID=0 \
         "clods-synapse:$bug" generate >/dev/null
 
-    docker run -d --name "$NAME" -p "$TEST_PORT:8008" -v "$DATA_DIR:/data" "clods-synapse:$bug" >/dev/null
+    docker run -d --name "$NAME" -p "$TEST_PORT:8008" -v "$DATA_DIR:/data" \
+        -e UID=0 -e GID=0 \
+        "clods-synapse:$bug" >/dev/null
 
     OK=0
     for i in $(seq 1 20); do
@@ -91,7 +100,8 @@ for bug in "${ALL_TAGS[@]}"; do
     docker rm -f "$NAME" >/dev/null 2>&1 || true
 done
 
-rm -rf "$WORKDIR"
+# root-owned (UID=0 inside the containers above) -- plain rm can't touch these
+sudo rm -rf "$WORKDIR"
 
 echo
 if [ ${#FAILED[@]} -eq 0 ]; then

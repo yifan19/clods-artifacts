@@ -2,13 +2,14 @@
 
 Step-by-step instructions for all 5 packageable Android (Element) bugs from
 `ANDROID_README.md`'s corpus, grouped by the flow they exercise. This is the same
-server (self-hosted Synapse, HTTPS via a self-signed CA — see "Part A") and the same physical/
-emulated Android device (see "Part B") for every bug below; only the per-bug APK and instrumentation
-plan change.
+server (self-hosted [`synapse`](https://github.com/yifan19/synapse), HTTPS via a self-signed CA —
+see "Part A") and the same physical/emulated Android device (see "Part B") for every bug below;
+only the per-bug APK and instrumentation plan change.
 
 ## Naming note — read this first
 
-The results table in `bm_instrument/README.md` labels one of these bugs **`5132`**. That is the
+The results table in [`bm_instrument`](https://github.com/yifan19/clods-instrumenter)'s `README.md`
+labels one of these bugs **`5132`**. That is the
 upstream PR number that got *reverted* to create the bug, not the bug's own issue number — the
 bug/branch/folder in this checkout are all `element-5038`. This guide uses **`5132`** throughout
 (matching the table), but wherever you see it, the folder to `cd` into is `element-5038`. This is
@@ -42,9 +43,10 @@ just re-enter it).
 
 ## Part A — Server setup (once)
 
-Stand up the shared Synapse homeserver over HTTPS without registering a domain, using a
-self-signed CA that Element's *debug* build (`vector-gplay-arm64-v8a-debug.apk`, what's vendored
-for all 5 bugs) trusts via its `network_security_config.xml` `<debug-overrides>` block.
+Stand up the shared [`synapse`](https://github.com/yifan19/synapse) homeserver over HTTPS without
+registering a domain, using a self-signed CA that Element's *debug* build
+(`vector-gplay-arm64-v8a-debug.apk`, what's vendored for all 5 bugs) trusts via its
+`network_security_config.xml` `<debug-overrides>` block.
 
 Primary path: `android-common/https_setup/docker/` — builds Synapse from its own
 `docker/Dockerfile` and runs it via `docker compose`, no manual poetry/rust/venv/systemd on the
@@ -101,21 +103,31 @@ Homeserver URL to enter in Element for every bug below: `https://<public-ip>:844
 ## Part C — "send" experiments (516, 6782, 7516)
 
 > **Note:** 6782 and 7516 below (client-only) work fine against the docker-based server from
-> Part A. Element-516's instrumented round and the "stop/start the plain service" notes in Part D
-> still reference the older venv+systemd path (`synapse-clods`, `run_instrumented_synapse.sh`,
-> `/opt/synapse-clods/...`) — the docker image is already built on the right Python version for
-> this (see Part A), but the driver-invocation equivalent for `docker compose` hasn't been wired
-> up yet. Ask if you want that built out next.
+> Part A. Element-516's instrumented round below still uses the older venv+systemd path
+> (`synapse-clods`, `run_instrumented_synapse.sh`, `/opt/synapse-clods/...`) — the docker image is
+> already built on the right Python version for this (see Part A), but the driver-invocation
+> equivalent for `docker compose` hasn't been wired up yet. Ask if you want that built out next.
 
 ### element-516 — Sent message not removed from local cache
 
 The only bug here with a server-side hook: round 2 pairs a client-side probe
-(`plans/round2/1.properties`, `UnsignedData.getTransactionId`) with a Python-Instrumentation hook
-on `synapse.events.utils.serialize_event` (already armed in
+(`plans/round2/1.properties`, `UnsignedData.getTransactionId`) with a
+[Python-Instrumentation](https://github.com/yifan19/Python-Instrumentation) hook on
+`synapse.events.utils.serialize_event` (already armed in
 `Python-Instrumentation/constants/hooks.py`'s `USER_CALLABLES_TO_HOOK`). Run Synapse through the
-driver instead of the plain service for this one (venv/systemd path, see note above):
+driver instead of the plain service for this one (venv/systemd path, see note above) —
+one-time setup, then run each time:
 ```bash
-# on the box
+# from your workstation
+rsync -a ../android/Python-Instrumentation/ <box>:/opt/synapse-clods/Python-Instrumentation/
+```
+```bash
+# on the box, as root — rebuilds the venv on Python 3.10 (Python-Instrumentation's bytecode
+# rewriting needs CALL_FUNCTION, an opcode 3.11+ removed), one time only
+sudo ./setup_instrumented_synapse.sh
+```
+```bash
+# on the box, each time you run this round
 sudo systemctl stop synapse-clods
 ./run_instrumented_synapse.sh -d
 ```

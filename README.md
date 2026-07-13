@@ -9,10 +9,27 @@ already set up:
 - **`EXPERIMENT_GUIDE.md`** — phone + self-hosted-homeserver walkthrough for all 5 Android bugs
   (a self-signed-CA HTTPS setup that needs no registered domain, plus per-bug run steps).
 
+## Upstream repos
+
+The projects this artifact is built around:
+
+- [`bm_instrument`](https://github.com/yifan19/clods-instrumenter) — the instrumentation tool and
+  bug corpus (`server-bugs/`, `element-bugs/`, `ARTIFACT_EVALUATION.md`) both tracks draw from.
+- [`Python-Instrumentation`](https://github.com/yifan19/Python-Instrumentation) — the server-side
+  (Synapse) hook framework used by element-516's round 2 (see `EXPERIMENT_GUIDE.md` Part C).
+- [`synapse`](https://github.com/yifan19/synapse) — the Matrix homeserver these bugs run against,
+  instrumented fork of [element-hq/synapse](https://github.com/element-hq/synapse).
+- [`element-android`](https://github.com/yifan19/element-android) — the Element Android client
+  these bugs live in (see `ANDROID_README.md`), instrumented fork of
+  [element-hq/element-android](https://github.com/element-hq/element-android). Bug/round work
+  lives on its `5038`/`516`/`6782`/`7516`/`7643`/`5132`/`5874` branches (`_production` variants
+  included), not `develop`.
+
 ## Server-side track
 
-Dockerized, multi-container reproduction of the 13 server-side bugs from `bm_instrument`'s bug
-corpus (original work used scripts internally)
+Dockerized, multi-container reproduction of the 13 server-side bugs from
+[`bm_instrument`](https://github.com/yifan19/clods-instrumenter)'s bug corpus (original work used
+scripts internally)
 
 ## ⚠️ Status: generated, not yet Docker-smoke-tested
 

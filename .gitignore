@@ -10,6 +10,12 @@
 
 # fresh-run output (empty until you run a bug; never worth tracking)
 */results/
+*/results_aws/
+
+# real host IPs/SSH key paths for run_experiment_aws.sh — user-specific, never worth tracking
+# (hosts.env.example, the checked-in template, is intentionally not covered by this)
+*/hosts.env
+*.pem
 
 # Android APKs (symlinked from bm_instrument/element-bugs/*/results/, ~70-90MB each)
 element-*/apk/*

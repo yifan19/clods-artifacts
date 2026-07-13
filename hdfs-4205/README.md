@@ -15,15 +15,28 @@ This runs baseline, then rounds 1 2 of `./plans/round<N>/<id>.properties` (popul
 yourself from `bm_instrument/server-bugs/instrumentation_hdfs4205/`, using the same `plans/round<N>/<id>.properties` layout
 the Android bugs use — see `final_artifact/README.md`), against the versions below.
 
+### Reproduce on a real 4-node AWS cluster instead
+
+`run_experiment.sh` runs all 4 nodes as docker-compose containers sharing one host. If you want to
+rule out that simplification (real host/network isolation is how the original historical run
+actually reproduced this — see the 4 distinct AWS IPs in `experimental_results/`), use
+`./run_experiment_aws.sh` instead: `cp hosts.env.example hosts.env`, fill in 4 real EC2 instances +
+an SSH key, then `./run_experiment_aws.sh`. Results land in `./results_aws/`. See that script's
+header comment for the full setup — it reuses every orchestration script under `../common/lib/`
+unchanged, only redoing the docker-image bootstrap against real hosts. Works against both Ubuntu
+20.04 and 24.04 instances; run `./build_python2.sh` once first to populate
+`../binaries/python-2.7.18-ubuntu24.04-x86_64.tar.gz` (a from-source Python 2.7.18 build, since
+24.04 no longer packages python2 at all — see `run_experiment_aws.sh`'s "OS note").
+
 ## Versions (ground truth: `benchmark_scripts/master_*.sh`)
 
 | Component | Version |
 |---|---|
 | Hadoop | `hadoop-0.23.9-SNAPSHOT` |
-| HBase | `hbase-1.0.0` |
-| ZooKeeper | `zookeeper-3.4.6` **[MISSING — see MISSING_ARTIFACTS.md]** |
+| HBase | `hbase-0.94.27-hadoop023` |
+| ZooKeeper | `zookeeper-3.4.6` |
 | YCSB | `ycsb-0.12.0` |
-| YCSB binding | `hbase10` |
+| YCSB binding | `hbase094` |
 
 **Original command this reproduces:** `master_ycsb.sh: HADOOP_NAME=hadoop-0.23.9-SNAPSHOT HBASE_NAME=hbase-1.0.0 YCSB_BENCHMARK=hbase10 benchmark_ycsb_hbase.sh {add|baseline} 1 1000000 4205 DataNode`
 
@@ -33,16 +46,10 @@ Workload driver: `ycsb_hbase` (see `../common/lib/run_workload.sh`). Injected pr
 `DataNode` on **slaves**. Symptom probe: `./plans/symptom.properties` if present (the
 final, confirmed probe), else inspect the highest-numbered `./plans/round<N>/`.
 
-## ⚠️ Missing artifacts
-
-This bug cannot run until these are fetched into `final_artifact/binaries/` (see `../MISSING_ARTIFACTS.md`):
-
-- `zookeeper-3.4.6.tar.gz`
-
 
 ## Notes
 
-FLAG: the injected symptom (server-bugs/instrumentation_hdfs4205/symptom.properties) is in NameNode-internal class INodeDirectory, but the original script's own APP_NAME argument for this bug's ycsb run is 'DataNode'. Carried over literally rather than silently 'corrected' — if the symptom doesn't reproduce with app_target=slaves, try app_target=master (APP_NAME=Namenode) instead; see this bug's README.
+FLAG: the injected symptom (server-bugs/instrumentation_hdfs4205/symptom.properties) is in NameNode-internal class INodeDirectory, but the original script's own APP_NAME argument for this bug's ycsb run is 'DataNode'. Carried over literally rather than silently 'corrected' — if the symptom doesn't reproduce with app_target=slaves, try app_target=master (APP_NAME=Namenode) instead; see this bug's README. RPC-VERSION WALL: this bug's vendored hadoop-0.23.9-SNAPSHOT NameNode speaks IPC protocol version 5, a transitional Hadoop-0.23-branch RPC generation that predates the protobuf-RPC rewrite (v9, used by every off-the-shelf HBase 0.94/0.96/0.98/1.0+ hadoop2-compat build) but postdates the old Hadoop-1.x Writable RPC (v4, used by every -hadoop1 build) — so no off-the-shelf HBase release, INCLUDING the ground-truth hbase-1.0.0 above (origin_cmd), can actually talk to it in this docker-compose setup: hbase-0.96.2-hadoop1 and hbase-0.98.9-hadoop1 -> 'Server IPC version 5 cannot communicate with client version 4'; hbase-0.96.2-hadoop2 (fetched from archive.apache.org) and hbase-1.0.0 itself -> NameNode logs 'got version 9 expected version 5', HMaster aborts. hbase-1.0.0's real, successful historical run in experimental_results/ was presumably on real AWS hardware with a different/patched Hadoop or HBase build than what's vendored in binaries/ today — unresolved, flagged separately for investigation. hbase_name is pinned here to hbase-0.94.27-hadoop023, a CUSTOM build (not from binaries/ upstream — see build recipe below) of HBase 0.94.27 compiled with `-Dhadoop.profile=23 -Dhadoop.version=0.23.9`, i.e. against real Apache Hadoop 0.23.9's own IPC-v5-generation client jars (pulled from Maven Central, not the vendored SNAPSHOT specifically — same RPC generation/version either way since RPC version is a hardcoded era-of-code-generation constant, not tied to the exact patch snapshot). This is the only combination confirmed to actually clear HBase-master startup against this bug's NameNode. ycsb_binding moved to hbase094 to match 0.94.x's client wire protocol (already used elsewhere in this corpus by hdfs-1540's hbase-0.94.27). BUILD RECIPE for hbase-0.94.27-hadoop023.tar.gz: `git clone --depth 1 --branch rel/0.94.27 https://github.com/apache/hbase.git`, then two minimal JDK8-compatibility source patches (JDK6/7-era 2014 code doesn't compile clean under modern javac) — rename PoolMap.remove(K,V) to removeValue (erasure-clashes with Map's Java-8-added default remove(Object,Object), update its one caller in HTablePool.java) and add an explicit (K[]) cast in InputSampler.java's writePartitionFile (raw-typed InputFormat erases the generic return type under modern javac's stricter checking) — then `JAVA_HOME=<jdk8> mvn -B -Dhadoop.profile=23 -Dhadoop.version=0.23.9 -Dsurefire.version=2.12 -DskipTests -Dmaven.test.skip=true clean package` (the -Dsurefire.version override replaces a dead custom-repo-hosted maven-failsafe-plugin fork with a real Central release). Produces target/hbase-0.94.27.tar.gz directly via the project's own assembly plugin; repack renaming the top-level dir (and the tarball) to hbase-0.94.27-hadoop023 to avoid colliding with the unrelated standard hbase-0.94.27.tar.gz already vendored in binaries/.
 
 ## Mapping to the results table
 

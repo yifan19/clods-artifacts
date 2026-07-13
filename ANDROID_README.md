@@ -1,6 +1,9 @@
 # Android (Element) bug reproduction — Track B
 
-Companion to `README.md` (the server-side track). Covers the 5 packageable Android bugs from
+Companion to `README.md` (the server-side track; see its "Upstream repos" section for the
+[`bm_instrument`](https://github.com/yifan19/clods-instrumenter),
+[`Python-Instrumentation`](https://github.com/yifan19/Python-Instrumentation), and
+[`synapse`](https://github.com/yifan19/synapse) links). Covers the 5 packageable Android bugs from
 `bm_instrument`'s corpus: `element-516`, `element-5038`, `element-6782`, `element-7516`,
 `element-7643` (a 6th, `element-2143`, has no folder/APK anywhere in this checkout — stubbed).
 

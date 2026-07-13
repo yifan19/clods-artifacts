@@ -1,0 +1,42 @@
+# Expects this layout on the box (see setup.sh / README in this folder):
+#   ~/clods/synapse/                 <- rsync of android/synapse (has docker/Dockerfile)
+#   ~/clods/Python-Instrumentation/  <- rsync of android/Python-Instrumentation (for element-516 later)
+#   ~/clods/docker-compose.yml       <- this file
+#   ~/clods/setup.sh
+#
+# PYTHON_VERSION is pinned to 3.10 (not the Dockerfile's own default of 3.11) because
+# Python-Instrumentation's bytecode rewriting hardcodes the CALL_FUNCTION opcode, which
+# Python 3.11 removed. Keeping the image on 3.10 means the same image can later run
+# element-516's instrumented plan (see ../setup_instrumented_synapse.sh's README note),
+# not just plain Synapse.
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: synapse_user
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: synapse
+      # Synapse requires C-locale UTF8 (see docs/postgres.md) -- POSTGRES_INITDB_ARGS
+      # applies to the whole cluster on first init, equivalent to the manual
+      # `createdb --locale=C --template=template0` dance the non-docker setup needed.
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  synapse:
+    build:
+      context: ./synapse
+      dockerfile: docker/Dockerfile
+      args:
+        PYTHON_VERSION: "3.10"
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8008:8008"
+
+volumes:
+  pgdata:

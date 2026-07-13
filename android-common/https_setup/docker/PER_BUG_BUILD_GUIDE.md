@@ -55,21 +55,24 @@ docker images clods-synapse
 
 ## 3. Run a bug's image, exposing 8008
 
-Pick the tag for whichever bug you're driving right now:
+`./run_bug.sh <bug>` automates this (stops whatever's running, starts the requested tag against
+the shared `./data/`, health-checks it) — `./run_bug.sh 516`, `./run_bug.sh stop`,
+`./run_bug.sh status`. Manually, that's:
 ```bash
-docker run -d --name clods-synapse \
-    -p 8008:8008 \
+docker run -d --name clods-synapse-active \
+    -p 127.0.0.1:8008:8008 \
     -v ~/clods/data:/data \
     clods-synapse:516        # swap the tag for whichever bug
 ```
-(`-v ~/clods/data:/data` — reuse the same `data/` dir this session's `synapse_build/data/` already
-has a generated `homeserver.yaml`/signing key in, so you're not regenerating config per bug. If you
-want each bug fully isolated instead, use a separate `-v` target per tag, e.g. `~/clods/data-516`.)
+(`-v ~/clods/data:/data` — reuse the same `data/` dir `setup.sh` already generated a
+`homeserver.yaml`/signing key in, so you're not regenerating config per bug. If you want each bug
+fully isolated instead, use a separate `-v` target per tag, e.g. `~/clods/data-516`.)
 
-To switch bugs: `docker rm -f clods-synapse`, then `docker run ...` again with the other tag. Since
-they share `/data`, the same `homeserver.yaml`/accounts/database carry over between bugs — only
-the server binary itself changes. If you'd rather each bug got a clean database too, point `-v` at
-a fresh directory per tag and re-run the `generate` step from `setup.sh` for that directory first.
+To switch bugs: `docker rm -f clods-synapse-active`, then `docker run ...` again with the other
+tag (or just `./run_bug.sh <other-bug>`, which does exactly that). Since they share `/data`, the
+same `homeserver.yaml`/accounts/database carry over between bugs — only the server binary itself
+changes. If you'd rather each bug got a clean database too, point `-v` at a fresh directory per tag
+and re-run the `generate` step from `setup.sh` for that directory first.
 
 ## 4. Create user1 and user2
 

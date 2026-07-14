@@ -29,9 +29,27 @@ attach to hot-swap that patched class into the running app) needs either `$ANDRO
 real NDK install (then it builds ARTTI's agent from a `.btm` plan auto-converted from this round's
 `.properties` files — lossy in places, see `android-common/lib/properties_to_btm.py`'s docstring)
 or falls back to the generic prebuilt agent (attach mechanism only, its breakpoints won't match
-this round's plan). **If you have the actual `agent_element.cpp`, that's the one artifact worth
-fetching to close this gap for real** — everything else here is either vendored or has a working
-substitute.
+this round's plan).
+
+**Update (2026-07-14):** the real production `agent_element.cpp` has since been located — it's a
+`ClassFileLoadHook`/`RetransformClasses` live-redefine agent (reads a pre-pushed patched `.class`
+from the app's own private storage, not a breakpoint logger like ARTTI's substitute above). Its
+hardcoded target class (`DefaultSyncTask`) matches `element-7516`'s round plans exactly, confirming
+it's `element-7516`-specific rather than a generic template — see `ROUND_DEX_MAP.md` for the full
+per-round class/dex table.
+
+Separately, step 1 (offline dex2jar+CommandLine patch) claimed "✅ full pipeline" above but was
+never actually run end-to-end until now: `Transformer.java` hardcoded
+`FileOutputStream("/data/new<Class>.class")`, which only succeeds when the process can write to
+`/data` (true inside this project's own Docker container running as root; false in a plain host
+environment, where it throws `FileNotFoundException: ... Permission denied`). Fixed upstream —
+`Transformer.java` now reads the output dir from `-Dbminstrument.outdir` (default `/data`, so
+on-device/in-container behavior is unchanged) — pushed to `bm_instrument`'s **`android_final`**
+branch (not `android` — `android_final` is what this repo's `bm_instrument-android-src` actually
+tracks, despite the "`android` branch" note above; that's a stale doc claim, not re-verified here).
+`patch_round.py` was updated to pass that flag and read the patched class from a workdir-local
+directory instead of `/data`. With this fix, all 16 round-plans across the 5 real vendored APKs
+were verified to patch cleanly (1/1 classes, 0 warnings) — see `ROUND_DEX_MAP.md`.
 
 ## Prerequisites
 

@@ -86,10 +86,12 @@ def main():
 
     unpack_dir = os.path.join(args.workdir, "apk_unpack")
     out_dir = os.path.join(args.workdir, "out")
+    patched_out_dir = os.path.abspath(os.path.join(args.workdir, "patched_classes"))
     if os.path.isdir(unpack_dir):
         shutil.rmtree(unpack_dir)
     os.makedirs(unpack_dir)
     os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(patched_out_dir, exist_ok=True)
 
     run('unzip -o -q "%s" -d "%s"' % (args.apk, unpack_dir))
 
@@ -108,10 +110,12 @@ def main():
             continue
         class_dex_dir = os.path.join(unpack_dir, dex_name)
 
-        run('java -cp "%s" ca.uoft.drsg.bminstrument.CommandLine -i "%s" "%s"'
-            % (args.instrument_jar, args.plan, class_dex_dir))
-        # CommandLine writes the patched .class to /data/<basename>.class (see CommandLine.java)
-        patched = glob.glob("/data/*%s.class" % os.path.basename(cls))
+        run('java -Dbminstrument.outdir="%s" -cp "%s" ca.uoft.drsg.bminstrument.CommandLine -i "%s" "%s"'
+            % (patched_out_dir, args.instrument_jar, args.plan, class_dex_dir))
+        # CommandLine writes the patched .class to <patched_out_dir>/new<basename>.class
+        # (see bm_instrument-android-src's Transformer.java; the original hardcoded /data/, which
+        # only works inside the project's own Docker container running as root)
+        patched = glob.glob(os.path.join(patched_out_dir, "*%s.class" % os.path.basename(cls)))
         if not patched:
             print("WARNING: CommandLine did not produce a patched class for %s" % cls, file=sys.stderr)
             continue

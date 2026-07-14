@@ -81,8 +81,10 @@ RUN sed -i 's/#\?PermitUserEnvironment.*/PermitUserEnvironment yes/' /etc/ssh/ss
 # future source change breaks the build.
 COPY blameMasterInstrument.jar /opt/blameMasterInstrument.jar
 COPY bm_instrument-src /opt/bm_instrument-src
-COPY m2-repo /opt/m2-repo
-RUN cd /opt/bm_instrument-src && mvn -o -Dmaven.repo.local=/opt/m2-repo package -DskipTests
+
+# you can build your own bm_instrument
+#COPY m2-repo /opt/m2-repo
+#RUN cd /opt/bm_instrument-src && mvn -o -Dmaven.repo.local=/opt/m2-repo package -DskipTests
 
 COPY lib /opt/lib
 COPY entrypoint.sh /opt/entrypoint.sh

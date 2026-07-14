@@ -6,6 +6,10 @@
 # and restore with unbundle_untracked.sh — useful for handing off a fully-populated checkout
 # without S3 access, or for backing up before a risky operation.
 #
+# Only ever includes untracked/ignored content (git status codes ?? / !!) — never a tracked file's
+# uncommitted local changes (M/D/etc against the index), and never a dotfile/dot-directory or a
+# directory that's itself a git repo (see below — those are for fetch_upstream_repos.sh instead).
+#
 # Usage: ./bundle_untracked.sh [--dereference] [output.tar.gz]
 #   output.tar.gz defaults to ../final_artifact-untracked-<date>.tar.gz (outside the repo, so a
 #   second run doesn't try to include the first run's archive).
@@ -30,16 +34,35 @@ for arg in "$@"; do
 done
 OUT="${ARGS[0]:-../final_artifact-untracked-$(date +%Y%m%d).tar.gz}"
 MANIFEST="$(mktemp)"
-trap 'rm -f "$MANIFEST"' EXIT
 
-# --ignored + --untracked-files=all: every path git doesn't track, files listed individually
-# (not collapsed to their parent dir) so the manifest is actually useful. .claude/ is excluded:
-# it's this harness's own worktree-management directory (which may itself contain full nested
-# checkouts of this repo) and settings, not project data.
+# --ignored + --untracked-files=all: every path git doesn't track, files listed individually (not
+# collapsed to their parent dir) so the manifest is actually useful — except embedded git repos
+# (e.g. the Python-Instrumentation checkout vendored at this repo's root), which git always
+# collapses to one directory line regardless of --untracked-files=all.
+#
+# Two things get filtered out below:
+#  - any path with a dot-prefixed segment (.claude/, .git, hidden config/cache files, etc.) —
+#    not project data.
+#  - directories that are themselves git repos — re-tarring a repo as flat files throws away its
+#    history and duplicates what fetch_upstream_repos.sh already clones properly; skip it here and
+#    use that script for these instead.
+RAW_MANIFEST="$(mktemp)"
+trap 'rm -f "$MANIFEST" "$RAW_MANIFEST"' EXIT
+
 git status --porcelain --ignored --untracked-files=all \
-    | awk '{ $1=""; sub(/^ /, ""); print }' \
-    | grep -v -e '^\.claude/' -e '^__pycache__/' -e '\.pyc$' \
-    > "$MANIFEST"
+    | awk '{ code = substr($0, 1, 2); if (code == "??" || code == "!!") print substr($0, 4) }' \
+    | awk -F'/' '{ skip=0; for (i=1; i<=NF; i++) if (substr($i,1,1) == ".") skip=1; if (!skip) print }' \
+    | grep -v -e '^__pycache__/' -e '\.pyc$' \
+    > "$RAW_MANIFEST"
+
+: > "$MANIFEST"
+while IFS= read -r p; do
+    if [ -e "$REPO_ROOT/${p%/}/.git" ]; then
+        echo "  skipping nested git repo: $p (use fetch_upstream_repos.sh instead)" >&2
+        continue
+    fi
+    echo "$p" >> "$MANIFEST"
+done < "$RAW_MANIFEST"
 
 count=$(wc -l < "$MANIFEST")
 if [ "$count" -eq 0 ]; then

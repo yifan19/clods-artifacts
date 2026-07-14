@@ -98,7 +98,81 @@ docker exec clods-synapse-active register_new_matrix_user \
 from `homeserver.yaml`, same admin-bypass mechanism as before, works regardless of
 `enable_registration`.)
 
-## 5. Real domain + nginx + Let's Encrypt (clods-test.uk)
+## 5. Enabling an instrumented build, and reading the log buffer (516/7516)
+
+### Enabling it
+
+It's baked into the image at **build** time, not switchable per-run: whichever
+`Python-Instrumentation` branch is checked out on disk when you run `docker build` (§2) is what
+gets copied in, and that checkout's `constants/hooks.py` is the plan that ends up armed. There's no
+way to pick a different hook against an already-built image — rebuild with the other branch
+checked out instead.
+
+Whether it actually *runs* is a separate, per-container toggle: the `SYNAPSE_INSTRUMENT` env var.
+`./run_bug.sh 516` / `./run_bug.sh 7516` set it automatically; every other bug leaves it unset and
+runs plain synapse. Manually:
+```bash
+docker run -d --name clods-synapse-active \
+    -p 127.0.0.1:8008:8008 -p 127.0.0.1:8090:8090 \
+    -v ~/clods/data:/data \
+    -e SYNAPSE_INSTRUMENT=/opt/python-instrumentation/driver.py \
+    clods-synapse:516
+```
+(`-p 127.0.0.1:8090:8090` — see "Reading the log buffer" below for why. Restricted to the host's
+own loopback, not exposed beyond the machine it's running on.)
+
+To confirm it's actually active: `docker logs clods-synapse-active` should show `Python
+Instrumentor located at ...`, then (for `516`, since `serialize_event` gets hit during ordinary
+sync traffic) a bytecode disassembly dump the moment `synapse.events.utils` is imported. **`7516`
+specifically doesn't reliably show these prints in `docker logs`** — its older synapse's own
+logging/daemonization setup appears to orphan Python's stdout buffer before it flushes. That's a
+logging quirk, not a broken hook (`check_valid_filter` also just doesn't fire until a client
+actually makes a filter-related request, unlike `serialize_event`) — use the log buffer below to
+check instead, it isn't affected.
+
+### Reading the instrumentation log buffer
+
+Every hook fire gets appended to an in-memory list (`instrument_logs`) inside the running
+container, served over a small TCP socket on port 8090 (`Python-Instrumentation/utils/
+instrumentation.py`'s `start_server`) — send it anything, it replies with the current buffer as
+a Python-repr'd list, then the list's length, then closes.
+
+From your workstation (needs `-p 127.0.0.1:8090:8090` published, which `run_bug.sh` does
+automatically for `516`/`7516`):
+```bash
+python3 android/Python-Instrumentation/connect.py
+```
+Or from inside the container, which always works regardless of what's published:
+```bash
+docker exec clods-synapse-active python3 /opt/python-instrumentation/driver.py -c "print(1)"  # sanity-only, doesn't read the buffer
+docker exec clods-synapse-active python3 -c "
+import socket
+s = socket.socket()
+s.connect(('localhost', 8090))
+s.sendall(b'x')
+print(s.recv(65536))
+"
+```
+
+**Reading the output.** Each entry is `(thread_id, 'DEADBEEF ID =', <id>)` for a plain
+before/after/stacktrace probe, matching the `id` values in the armed plan's
+`instrumentation_rules` (`constants/hooks.py`). For `element-516`'s `serialize_event` plan
+specifically, `ids 1,2,3,5,7` fire on *every* call (the branch-tracking probes), and `id 8` fires
+once per real un-cleared `$local.<uuid>` echo — matching the historical capture at
+`bm_instrument/element-bugs/element516/rerun/round2_python` (`EXPERIMENT_GUIDE.md` Part C has the
+same fingerprint). Example buffer after some real traffic:
+```
+[(131628164079744, 'DEADBEEF ID =', 1), (131628164079744, 'DEADBEEF ID =', 2),
+ (131628164079744, 'DEADBEEF ID =', 3), (131628164079744, 'DEADBEEF ID =', 5),
+ (131628164079744, 'DEADBEEF ID =', 7), (131628164079744, '$local.41927b13-...', 8)]
+```
+
+The buffer is **plain in-memory state** — it resets to empty on every container restart (`./run_bug.sh
+<bug>` restarting the same bug, or switching bugs entirely), and there's no persistence across
+runs. If you need to keep a capture, save the connect.py output to a file yourself before
+restarting/switching.
+
+## 6. Real domain + nginx + Let's Encrypt (clods-test.uk)
 
 This replaces the self-signed-CA approach from `EXPERIMENT_GUIDE.md` — worth it now that there's a
 real registered domain, since evaluators' devices/browsers won't need a manually-installed CA to

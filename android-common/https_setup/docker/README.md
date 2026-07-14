@@ -55,3 +55,5 @@ docker compose down                # stop everything
 
 For standing up per-bug images (`element-7516` needs an old server version, the rest don't) and
 handing evaluators a real HTTPS domain instead of a self-signed CA, see `PER_BUG_BUILD_GUIDE.md`.
+That's also where enabling a server-side instrumentation hook (`516`/`7516` only) and reading its
+log buffer are documented.

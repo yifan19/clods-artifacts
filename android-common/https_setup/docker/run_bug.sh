@@ -71,9 +71,11 @@ echo "== stopping whatever's currently running =="
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 
 RUN_ARGS=()
+INSTRUMENTED=0
 for ib in "${INSTRUMENTED_BUGS[@]}"; do
     if [ "$ib" = "$BUG" ]; then
-        RUN_ARGS+=(-e SYNAPSE_INSTRUMENT=/opt/python-instrumentation/driver.py)
+        INSTRUMENTED=1
+        RUN_ARGS+=(-e SYNAPSE_INSTRUMENT=/opt/python-instrumentation/driver.py -p 127.0.0.1:8090:8090)
         echo "== $BUG has a server-side hook -- running through Python-Instrumentation's driver =="
     fi
 done
@@ -85,6 +87,11 @@ docker run -d --name "$NAME" -p 127.0.0.1:8008:8008 -v "$(pwd)/data:/data" \
 for i in $(seq 1 20); do
     if curl -fsS http://127.0.0.1:8008/health >/dev/null 2>&1; then
         echo "$BUG: OK, responding on :8008"
+        if [ "$INSTRUMENTED" = 1 ]; then
+            echo "Instrumentation log buffer: python3 /opt/python-instrumentation/connect.py from"
+            echo "your workstation (port 8090 is published), or see PER_BUG_BUILD_GUIDE.md's"
+            echo "'Reading the instrumentation log buffer' section."
+        fi
         exit 0
     fi
     sleep 2

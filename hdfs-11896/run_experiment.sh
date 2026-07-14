@@ -27,7 +27,7 @@ fi
 mkdir -p results
 chmod 777 results
 docker compose build
-docker compose up -d
+docker compose up -d --force-recreate
 
 echo "== waiting for slaves over ssh =="
 docker compose exec -T --user ubuntu master /opt/lib/wait_for_ssh.sh

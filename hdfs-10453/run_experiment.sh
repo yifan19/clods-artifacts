@@ -26,6 +26,7 @@ if [ "$MISSING" = "1" ]; then
 fi
 
 mkdir -p results
+chmod 777 results
 docker compose build
 docker compose up -d
 

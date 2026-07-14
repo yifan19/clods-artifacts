@@ -7,49 +7,24 @@ Companion to `README.md` (the server-side track; see its "Upstream repos" sectio
 `bm_instrument`'s corpus: `element-516`, `element-5038`, `element-6782`, `element-7516`,
 `element-7643` (a 6th, `element-2143`, has no folder/APK anywhere in this checkout — stubbed).
 
-## ⚠️ Status: generated, not device-tested; one real gap (not just "untested")
+## ⚠️ Status (updated 2026-07-14): both pipeline steps verified; only physical-device execution is untested
 
-Same authoring-environment caveat as the server track (no way to `docker build`/run here), **plus**
-one thing that's a genuine content gap, not just "unverified": the original production pipeline's
-native agent source (`~/Dex/agent/agent_element.cpp`, referenced by
-`bm_instrument8/run.py`/`run.sh`) is **not present anywhere in this checkout** — searched
-exhaustively, including git history of every local repo. What *is* available and vendored instead:
+Earlier revisions of this doc described a real content gap: the original production agent
+(`agent_element.cpp`) wasn't present in this checkout, and the offline dex2jar+CommandLine step
+was marked "✅ full pipeline" without ever actually being run end-to-end. Both are now resolved:
 
-| Needed | What's vendored | Where from |
+| Needed | Status | Notes |
 |---|---|---|
-| Offline APK bytecode patching (dex2jar + `CommandLine`) | ✅ Full pipeline, matches the actual production script | `~/artifacts/dex2jar/` (source repo) + `~/artifacts/bm_instrument8/` (has `CommandLine.java`, absent from `bm_instrument/main` — this is `bm_instrument`'s **`android`** git branch, `git log origin/android` in that repo) |
-| Native agent to hot-load a patched class into a running process | ⚠️ Different implementation, not the original | `~/artifacts/ARTTI_instrument/agent/` — a separate, self-contained JVMTI **breakpoint** agent (reads a `.btm` plan, sets breakpoints directly, no dex2jar/live-redefine involved at all). This is NOT `agent_element.cpp` — it's a different technique that happens to solve the same problem (getting per-round instrumentation onto a running Android/ART process) |
-| Compiling that agent | ❌ Missing — **Android NDK** (Makefile expects `aarch64-linux-android28-clang++`) | not present anywhere on this machine |
-| A working fallback so `run_experiment.sh` doesn't just fail | ✅ One generic prebuilt `libagent.so` | `bm_instrument/android_benchmarking/libagent.so` |
+| Offline APK bytecode patching (dex2jar + `CommandLine`) | ✅ Verified end-to-end | All 16 round-plans across the 5 real vendored APKs patch cleanly (1/1 classes, 0 warnings) — see `ROUND_DEX_MAP.md`. Required fixing a real bug: `Transformer.java` hardcoded `FileOutputStream("/data/new<Class>.class")`, which only succeeds when the process can write to `/data` (true inside this project's own Docker container running as root; false on a plain host, where it throws `FileNotFoundException: Permission denied`). Fixed upstream (`Transformer.java` now reads the output dir from `-Dbminstrument.outdir`, default `/data` so in-container/on-device behavior is unchanged) — pushed to `bm_instrument`'s **`android_final`** branch (not `android` — that's what this repo's `bm_instrument-android-src` actually tracks; the old "`android` branch" claim was a stale doc error). `patch_round.py` also got two more fixes needed to run outside Docker: absolute-path resolution (a relative `--workdir`, exactly what `run_experiment.sh` passes, broke dex2jar's cwd-relative invocation) and lazy dex-file conversion (only decompiles as many of the APK's ~24 dex files as needed to locate the round's target class, instead of eagerly converting all of them). |
+| Native agent to hot-load a patched class into a running process | ✅ Real production technique, generalized and wired in | `agent_element.cpp` was located — a `ClassFileLoadHook`/`RetransformClasses` live-redefine agent (reads a pre-pushed patched `.class` from the app's own private storage). Its hardcoded target class (`DefaultSyncTask`) matches `element-7516`'s round plans exactly, confirming it was written specifically for that bug, not as a generic template. Generalized into `android-common/agent-src/agent_retransform.cpp`: the target class and replacement-classfile path are now read from `Agent_OnAttach`'s `options` string at attach time (`class=<slash/Name>,file=<path>`) instead of being hardcoded, so **one build is reused across every round of every bug** — driven by `patch_manifest.json`'s new `patched_class` field. `android-common/lib/build_retransform_agent.sh` builds it; `push_and_attach.sh` pushes the agent + patched class into the app's private storage and runs `attach-agent`. Compiles cleanly with NDK r26b (`26.1.10909125` — installable via `apt-get install google-android-ndk-r26b-installer` on Ubuntu; matches the version hardcoded in `agent-src/generate_agent.py`'s original path). ARTTI_instrument's breakpoint-based agent (`agent.cpp`/`generate_agent.py`/`build_agent.sh`) is still vendored as an alternate technique but is no longer what `run_experiment.sh` uses by default. |
+| End-to-end script logic | ✅ Verified (adb/device mocked) | The full generated `run_experiment.sh` (offline patch → build agent → push both files → attach) was dry-run with a stubbed `adb` and a real NDK build; completed with exit 0 for both rounds of `element-7516`, producing a valid classfile, a valid Dalvik dex, and a valid aarch64 `.so`. |
+| Actual on-device retransform behavior | ❌ Not verified | No physical/emulated arm64-v8a device was available in this environment. The `attach-agent` options-string format (`<path>=<options>`, splitting only on the first `=`) matches documented Android platform behavior but was not exercised against a real running ART process. |
 
-**Practical effect:** `run_experiment.sh` can always do step 1 (offline dex2jar+CommandLine patch —
-fully reproduces the actual bytecode change made for each round, inspectable under `work/round<N>/
-out/*.dex` regardless of NDK availability) and step 3 (drive UI + collect logcat). Step 2 (live
-attach to hot-swap that patched class into the running app) needs either `$ANDROID_NDK` set to a
-real NDK install (then it builds ARTTI's agent from a `.btm` plan auto-converted from this round's
-`.properties` files — lossy in places, see `android-common/lib/properties_to_btm.py`'s docstring)
-or falls back to the generic prebuilt agent (attach mechanism only, its breakpoints won't match
-this round's plan).
-
-**Update (2026-07-14):** the real production `agent_element.cpp` has since been located — it's a
-`ClassFileLoadHook`/`RetransformClasses` live-redefine agent (reads a pre-pushed patched `.class`
-from the app's own private storage, not a breakpoint logger like ARTTI's substitute above). Its
-hardcoded target class (`DefaultSyncTask`) matches `element-7516`'s round plans exactly, confirming
-it's `element-7516`-specific rather than a generic template — see `ROUND_DEX_MAP.md` for the full
-per-round class/dex table.
-
-Separately, step 1 (offline dex2jar+CommandLine patch) claimed "✅ full pipeline" above but was
-never actually run end-to-end until now: `Transformer.java` hardcoded
-`FileOutputStream("/data/new<Class>.class")`, which only succeeds when the process can write to
-`/data` (true inside this project's own Docker container running as root; false in a plain host
-environment, where it throws `FileNotFoundException: ... Permission denied`). Fixed upstream —
-`Transformer.java` now reads the output dir from `-Dbminstrument.outdir` (default `/data`, so
-on-device/in-container behavior is unchanged) — pushed to `bm_instrument`'s **`android_final`**
-branch (not `android` — `android_final` is what this repo's `bm_instrument-android-src` actually
-tracks, despite the "`android` branch" note above; that's a stale doc claim, not re-verified here).
-`patch_round.py` was updated to pass that flag and read the patched class from a workdir-local
-directory instead of `/data`. With this fix, all 16 round-plans across the 5 real vendored APKs
-were verified to patch cleanly (1/1 classes, 0 warnings) — see `ROUND_DEX_MAP.md`.
+**Practical effect:** `run_experiment.sh` does the offline dex2jar+CommandLine patch (step 1,
+`work/round<N>/out/*.dex` + `patched_classes/*.class`), builds+attaches the live retransform agent
+(step 2, needs `$ANDROID_NDK`; skipped with a clear message otherwise), and drives UI + collects
+logcat (step 3) — all verified except the final "does ART actually swap the bytecode" behavior,
+which needs a real device.
 
 ## Prerequisites
 
@@ -61,7 +36,13 @@ were verified to patch cleanly (1/1 classes, 0 warnings) — see `ROUND_DEX_MAP.
   network-reachable emulator). Full Android emulation-in-Docker (nested KVM, nested virtualization)
   was judged out of scope here — most artifact-evaluation environments won't have hardware
   acceleration for it anyway.
-- Android NDK (optional — only for full per-round agent rebuilds, see gap above).
+- Android NDK, for the live-attach step (`build_retransform_agent.sh`). Verified working with
+  **r26b** (`26.1.10909125`) — on Ubuntu: `apt-get install google-android-ndk-r26b-installer`
+  (installs to `/usr/lib/android-sdk/ndk/26.1.10909125`), then `export
+  ANDROID_NDK=/usr/lib/android-sdk/ndk/26.1.10909125`. Also needs a JDK 8 install for `jvmti.h`/
+  `jni.h` (`apt-get install openjdk-8-jdk`; `build_retransform_agent.sh` looks in
+  `/usr/lib/jvm/java-8-openjdk-amd64/include` by default, override via `$JAVA_INCLUDE_DIR`).
+  Without this, offline patching (step 1) still works — only the live-attach step is skipped.
 
 ## Quick start
 
@@ -84,8 +65,10 @@ and `android-common/` vendors everything else needed for the offline patching st
   (confirmed via `unzip -l`) — this is the exact jar needed for offline patching, no rebuild
   required. `android-common/bm_instrument-android-src/` — its source (= `bm_instrument`'s `android`
   git branch, also identical to `bm_instrument8/src/`).
-- `android-common/agent-src/` — ARTTI_instrument's `agent.cpp`/`Makefile`/`generate_agent.py` +
-  one generic prebuilt `libagent.so` fallback.
+- `android-common/agent-src/` — `agent_retransform.cpp` (the live-attach agent `run_experiment.sh`
+  actually uses now, generalized from the real production `agent_element.cpp`, also vendored here
+  for reference) + ARTTI_instrument's alternate breakpoint-based `agent.cpp`/`Makefile`/
+  `generate_agent.py` + one generic prebuilt `libagent.so` fallback for that alternate path.
 - Each `element-<bug>/apk/` — symlinked to that bug's real pre-built, working APK (not rebuilt from
   `element-android` source — rebuilding Element itself from Gradle is not needed for reproduction
   since the base APK is already captured).

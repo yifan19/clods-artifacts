@@ -44,14 +44,18 @@ Full commit provenance (root-cause commit(s) reverted, instrumentation commit(s)
    via `ca.uoft.drsg.bminstrument.CommandLine` (the **Android-branch** build of the instrumentation
    tool — see `../ANDROID_README.md` for why this isn't `bm_instrument/main`'s jar), and produces a
    patched `.dex` per changed class under `work/round<N>/out/`.
-2. **Live attach** (`android-common/lib/build_agent.sh` + `adb shell cmd activity attach-agent`):
-   attempts to hot-load the patched class into the *already-running* app process without a
-   reinstall, matching the original pipeline's technique. This step needs a JVMTI agent rebuilt
-   per round (different target class each time) — **requires `$ANDROID_NDK`**; without it, this
-   step is skipped with a warning and only the offline-patched `.dex` (step 1) is produced for
-   inspection. See `../ANDROID_README.md`'s "Known gap" section — this is the one part of the
-   original pipeline that could not be verified byte-for-byte against this checkout's available
-   source.
+2. **Live attach** (`android-common/lib/build_retransform_agent.sh` + `push_and_attach.sh` +
+   `adb shell cmd activity attach-agent`): hot-loads the patched class into the *already-running*
+   app process without a reinstall, using the same `ClassFileLoadHook`/`RetransformClasses` JVMTI
+   technique as the real production agent (`agent_element.cpp`, generalized in
+   `android-common/agent-src/agent_retransform.cpp` so the target class + replacement classfile
+   path come from `patch_manifest.json` at attach time via `Agent_OnAttach`'s `options` string,
+   instead of being hardcoded per round/bug). Unlike the offline dex2jar+CommandLine step, this
+   needs the raw patched `.class` (`patch_manifest.json`'s `patched_class` field — pre-jar2dex;
+   JVMTI's `ClassFileLoadHook` expects standard classfile bytes, not dex) pushed into the app's
+   private storage before attaching. **Requires `$ANDROID_NDK`**; without it, this step is skipped
+   with a warning and only the offline-patched `.dex` (step 1) is produced for inspection. See
+   `../ANDROID_README.md` for the full provenance of this agent.
 3. **Drive UI + collect** (`android-common/lib/drive_ui.sh` / `collect_log.sh`): taps through
    Element's compose/send flow and greps logcat for `DEADBEEF`/`CLODS`/`[Agent]`/`[BM]` markers.
 

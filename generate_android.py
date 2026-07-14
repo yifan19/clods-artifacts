@@ -26,9 +26,9 @@ RUN_EXPERIMENT_TMPL = """\
 #
 # What it does: installs this bug's pre-built APK, captures a baseline log, then for each round
 # in [{rounds}] offline-patches the target class(es) via dex2jar+CommandLine (matching the actual
-# production pipeline this corpus's results were captured with), attempts to build+attach a live
-# JVMTI agent for that round (falls back to a documented no-op if $ANDROID_NDK isn't set — see
-# ../ANDROID_README.md), drives the UI, and collects logcat. Results land in ./results/.
+# production pipeline this corpus's results were captured with), builds+attaches the live JVMTI
+# retransform agent (generalized from the real production agent_element.cpp — needs $ANDROID_NDK,
+# see ../ANDROID_README.md), drives the UI, and collects logcat. Results land in ./results/.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -63,16 +63,12 @@ for round in {rounds}; do
     python3 /opt/lib/patch_round.py --apk apk/vector-gplay-arm64-v8a-debug.apk \\
         --plan "plans/round${{round}}" --workdir "work/round${{round}}"
 
-    echo "== round r$round: attempting live JVMTI agent build (needs \\$ANDROID_NDK) =="
-    python3 /opt/lib/properties_to_btm.py "plans/round${{round}}" "work/round${{round}}/round.btm"
-    bash /opt/lib/build_agent.sh "work/round${{round}}/round.btm" "work/round${{round}}/agent"
-
-    PID=$(adb shell pidof "$PACKAGE" | tr -d '\\r')
-    if [ -n "$PID" ]; then
-        adb push "work/round${{round}}/agent/libagent.so" /data/local/tmp/
-        adb shell run-as "$PACKAGE" cp /data/local/tmp/libagent.so ./libagent.so || true
-        adb shell cmd activity attach-agent "$PID" "/data/user/0/$PACKAGE/libagent.so" || \\
-            echo "attach-agent failed — see ../ANDROID_README.md's live-attach caveat" >&2
+    echo "== round r$round: building live JVMTI retransform agent (needs \\$ANDROID_NDK) =="
+    if bash /opt/lib/build_retransform_agent.sh "work/round${{round}}/agent"; then
+        bash /opt/lib/push_and_attach.sh "work/round${{round}}" "$PACKAGE" \\
+            "work/round${{round}}/agent/libagent_retransform.so"
+    else
+        echo "live attach skipped — see ../ANDROID_README.md's live-attach caveat" >&2
     fi
 
     bash /opt/lib/drive_ui.sh &
@@ -131,14 +127,18 @@ Full commit provenance (root-cause commit(s) reverted, instrumentation commit(s)
    via `ca.uoft.drsg.bminstrument.CommandLine` (the **Android-branch** build of the instrumentation
    tool — see `../ANDROID_README.md` for why this isn't `bm_instrument/main`'s jar), and produces a
    patched `.dex` per changed class under `work/round<N>/out/`.
-2. **Live attach** (`android-common/lib/build_agent.sh` + `adb shell cmd activity attach-agent`):
-   attempts to hot-load the patched class into the *already-running* app process without a
-   reinstall, matching the original pipeline's technique. This step needs a JVMTI agent rebuilt
-   per round (different target class each time) — **requires `$ANDROID_NDK`**; without it, this
-   step is skipped with a warning and only the offline-patched `.dex` (step 1) is produced for
-   inspection. See `../ANDROID_README.md`'s "Known gap" section — this is the one part of the
-   original pipeline that could not be verified byte-for-byte against this checkout's available
-   source.
+2. **Live attach** (`android-common/lib/build_retransform_agent.sh` + `push_and_attach.sh` +
+   `adb shell cmd activity attach-agent`): hot-loads the patched class into the *already-running*
+   app process without a reinstall, using the same `ClassFileLoadHook`/`RetransformClasses` JVMTI
+   technique as the real production agent (`agent_element.cpp`, generalized in
+   `android-common/agent-src/agent_retransform.cpp` so the target class + replacement classfile
+   path come from `patch_manifest.json` at attach time via `Agent_OnAttach`'s `options` string,
+   instead of being hardcoded per round/bug). Unlike the offline dex2jar+CommandLine step, this
+   needs the raw patched `.class` (`patch_manifest.json`'s `patched_class` field — pre-jar2dex;
+   JVMTI's `ClassFileLoadHook` expects standard classfile bytes, not dex) pushed into the app's
+   private storage before attaching. **Requires `$ANDROID_NDK`**; without it, this step is skipped
+   with a warning and only the offline-patched `.dex` (step 1) is produced for inspection. See
+   `../ANDROID_README.md` for the full provenance of this agent.
 3. **Drive UI + collect** (`android-common/lib/drive_ui.sh` / `collect_log.sh`): taps through
    Element's compose/send flow and greps logcat for `DEADBEEF`/`CLODS`/`[Agent]`/`[BM]` markers.
 

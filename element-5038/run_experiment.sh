@@ -8,9 +8,9 @@
 #
 # What it does: installs this bug's pre-built APK, captures a baseline log, then for each round
 # in [1 2 3 4] offline-patches the target class(es) via dex2jar+CommandLine (matching the actual
-# production pipeline this corpus's results were captured with), attempts to build+attach a live
-# JVMTI agent for that round (falls back to a documented no-op if $ANDROID_NDK isn't set — see
-# ../ANDROID_README.md), drives the UI, and collects logcat. Results land in ./results/.
+# production pipeline this corpus's results were captured with), builds+attaches the live JVMTI
+# retransform agent (generalized from the real production agent_element.cpp — needs $ANDROID_NDK,
+# see ../ANDROID_README.md), drives the UI, and collects logcat. Results land in ./results/.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -45,16 +45,12 @@ for round in 1 2 3 4; do
     python3 /opt/lib/patch_round.py --apk apk/vector-gplay-arm64-v8a-debug.apk \
         --plan "plans/round${round}" --workdir "work/round${round}"
 
-    echo "== round r$round: attempting live JVMTI agent build (needs \$ANDROID_NDK) =="
-    python3 /opt/lib/properties_to_btm.py "plans/round${round}" "work/round${round}/round.btm"
-    bash /opt/lib/build_agent.sh "work/round${round}/round.btm" "work/round${round}/agent"
-
-    PID=$(adb shell pidof "$PACKAGE" | tr -d '\r')
-    if [ -n "$PID" ]; then
-        adb push "work/round${round}/agent/libagent.so" /data/local/tmp/
-        adb shell run-as "$PACKAGE" cp /data/local/tmp/libagent.so ./libagent.so || true
-        adb shell cmd activity attach-agent "$PID" "/data/user/0/$PACKAGE/libagent.so" || \
-            echo "attach-agent failed — see ../ANDROID_README.md's live-attach caveat" >&2
+    echo "== round r$round: building live JVMTI retransform agent (needs \$ANDROID_NDK) =="
+    if bash /opt/lib/build_retransform_agent.sh "work/round${round}/agent"; then
+        bash /opt/lib/push_and_attach.sh "work/round${round}" "$PACKAGE" \
+            "work/round${round}/agent/libagent_retransform.so"
+    else
+        echo "live attach skipped — see ../ANDROID_README.md's live-attach caveat" >&2
     fi
 
     bash /opt/lib/drive_ui.sh &

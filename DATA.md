@@ -73,10 +73,18 @@ bundle here. If you want those archived too, `git bundle create element-android.
 
 ```bash
 python3 generate.py && python3 generate_android.py   # regenerate the git-tracked scripts/plans
-# then re-upload whatever changed, e.g.:
-aws s3 sync binaries/ s3://clods-artifacts/final_artifact-data/binaries/
+./push_data.sh                                       # push whatever changed to S3 (see below)
 ```
 
-There's no single "reupload everything" script — `fetch_data.sh` is one-directional (S3 → local)
-by design, since the data going up is meant to be a considered, occasional step, not something
-that happens automatically on every `generate.py` run.
+`push_data.sh` is `fetch_data.sh`'s mirror image — same categories, same S3 keys, reverse
+direction (`aws s3 cp`/`sync` up instead of down). It's deliberately narrow: only the canonical
+categories this file documents, never build/test output (`--bug <id>` to scope to one bug,
+`--source` to also rebuild+push the three source git bundles from real checkouts — see
+`fetch_upstream_repos.sh` — `--dry-run` to preview). Unlike a plain `aws s3 cp`, it skips any file
+whose size already matches what's in S3, so re-running it after a small change (e.g. rebuilding
+just the instrumentation jar) doesn't re-transfer everything else.
+
+This still isn't automatic — pushing to the shared bucket is a deliberate, occasional step you run
+yourself when something's actually changed, not something `generate.py` triggers on its own. For
+snapshotting/handing off whatever's untracked in *your own* checkout without touching the shared
+bucket at all, see `bundle_untracked.sh`/`unbundle_untracked.sh` instead.

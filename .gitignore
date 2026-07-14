@@ -32,6 +32,14 @@ element-*/apk/*
 /android-common/bm_instrument-android-src/
 /android-common/dex2jar-src/
 
+# Python-Instrumentation checkout vendored at the repo root so android-common/https_setup/docker/
+# scripts can find it with a worktree-depth-independent relative path (../../../Python-Instrumentation)
+# instead of reaching outside this repo to ~/artifacts/android/Python-Instrumentation. Real git
+# checkout (branch-switchable -- develop/element-516/element-7516 select which server-side hook
+# gets baked into a build), not a flat copy, same rationale as the entries above -- not yet
+# archived as a bundle+fetch_data.sh entry the way those are, see DATA.md if that's wanted too.
+/Python-Instrumentation/
+
 # prebuilt dex2jar tool (ready-to-run jars) + the one prebuilt native-agent binary
 /android-common/dex2jar/
 /android-common/agent-src/libagent.so.prebuilt-generic

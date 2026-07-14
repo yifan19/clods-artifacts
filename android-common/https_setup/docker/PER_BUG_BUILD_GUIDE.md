@@ -24,25 +24,33 @@ maps to which branch.
 
 ## 2. Build + tag each image
 
+Preferred: `./build_and_test_all_bugs.sh` does exactly this (both branch checkouts, both builds,
+all 5 tags, plus a smoke test) in one shot — see its own header for env var overrides. Manually,
+that's:
 ```bash
+PI=../../final_artifact/Python-Instrumentation   # vendored at this repo's root, see its
+                                                  # .gitignore entry for why; assumes the standard
+                                                  # sibling layout (android/ and final_artifact/
+                                                  # under the same parent), same assumption
+                                                  # `cd android/synapse` below already makes
 cd android/synapse   # the repo itself, not a symlink -- see the note in ../../docker-compose.yml
                       # about why a symlinked build context silently drops files
 
 git status --short   # confirm no uncommitted tracked changes before switching branches
-git -C ../Python-Instrumentation status --short   # same, for the instrumentation checkout
+git -C "$PI" status --short   # same, for the instrumentation checkout
 
 # --- current version: 516, 6782, 5132, 7643 ---
 git checkout develop
-git -C ../Python-Instrumentation checkout element-516   # serialize_event armed -- 516's round2 plan
+git -C "$PI" checkout element-516   # serialize_event armed -- 516's round2 plan
 DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile --build-arg PYTHON_VERSION=3.10 \
-    --build-context instrumentation=../Python-Instrumentation \
+    --build-context "instrumentation=$PI" \
     -t clods-synapse:516 -t clods-synapse:6782 -t clods-synapse:5132 -t clods-synapse:7643 .
 
 # --- old version: 7516 ---
 git checkout bug10
-git -C ../Python-Instrumentation checkout element-7516   # check_valid_filter armed
+git -C "$PI" checkout element-7516   # check_valid_filter armed
 DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile --build-arg PYTHON_VERSION=3.10 \
-    --build-context instrumentation=../Python-Instrumentation \
+    --build-context "instrumentation=$PI" \
     -t clods-synapse:7516 .
 
 git checkout develop   # leave the checkout back on the branch other tooling in this repo expects
@@ -140,7 +148,7 @@ a Python-repr'd list, then the list's length, then closes.
 From your workstation (needs `-p 127.0.0.1:8090:8090` published, which `run_bug.sh` does
 automatically for `516`/`7516`):
 ```bash
-python3 android/Python-Instrumentation/connect.py
+python3 final_artifact/Python-Instrumentation/connect.py   # vendored at this repo's root, see §2
 ```
 Or from inside the container, which always works regardless of what's published:
 ```bash

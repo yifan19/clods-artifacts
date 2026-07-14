@@ -15,14 +15,16 @@
 #
 # Usage: ./build_and_test_all_bugs.sh
 # Env overrides: SYNAPSE_SRC (default: ../../../../android/synapse),
-#   PYTHON_INSTRUMENTATION_SRC (default: ../../../../android/Python-Instrumentation),
+#   PYTHON_INSTRUMENTATION_SRC (default: ../../../Python-Instrumentation, vendored at the repo
+#     root -- see .gitignore's note on why: worktree-depth-independent, unlike SYNAPSE_SRC which
+#     still reaches outside this repo),
 #   PYTHON_VERSION (default: 3.10)
 
 set -euo pipefail
 cd "$(dirname "$0")"
 
 SYNAPSE_SRC="${SYNAPSE_SRC:-../../../../android/synapse}"
-PYTHON_INSTRUMENTATION_SRC="${PYTHON_INSTRUMENTATION_SRC:-../../../../android/Python-Instrumentation}"
+PYTHON_INSTRUMENTATION_SRC="${PYTHON_INSTRUMENTATION_SRC:-../../../Python-Instrumentation}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
 WORKDIR="$(mktemp -d)"
 TEST_PORT=18008
@@ -35,6 +37,11 @@ if [ ! -f "$PYTHON_INSTRUMENTATION_SRC/driver.py" ]; then
     echo "PYTHON_INSTRUMENTATION_SRC ($PYTHON_INSTRUMENTATION_SRC) doesn't look like a Python-Instrumentation checkout (no driver.py)." >&2
     exit 1
 fi
+# Resolve to absolute now -- used both as a `git -C` target and a --build-context path after
+# this script pushd's into $SYNAPSE_SRC below, which can be a completely different, unrelated
+# absolute location (e.g. an env override) -- a relative PYTHON_INSTRUMENTATION_SRC would then
+# resolve against the wrong cwd and silently point nowhere real.
+PYTHON_INSTRUMENTATION_SRC="$(cd "$PYTHON_INSTRUMENTATION_SRC" && pwd)"
 if ! command -v docker >/dev/null 2>&1; then
     echo "Docker not found." >&2
     exit 1

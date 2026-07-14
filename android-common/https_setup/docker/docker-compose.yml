@@ -30,6 +30,10 @@ services:
       dockerfile: docker/Dockerfile
       args:
         PYTHON_VERSION: "3.10"
+      # Bakes in Python-Instrumentation (element-516/element-7516's server-side hooks) --
+      # inert unless SYNAPSE_INSTRUMENT is set at `docker run`/`docker compose run` time.
+      additional_contexts:
+        instrumentation: ./Python-Instrumentation
     restart: unless-stopped
     depends_on:
       - postgres

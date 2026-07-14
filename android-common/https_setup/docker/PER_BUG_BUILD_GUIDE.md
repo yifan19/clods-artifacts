@@ -29,24 +29,34 @@ cd android/synapse   # the repo itself, not a symlink -- see the note in ../../d
                       # about why a symlinked build context silently drops files
 
 git status --short   # confirm no uncommitted tracked changes before switching branches
+git -C ../Python-Instrumentation status --short   # same, for the instrumentation checkout
 
 # --- current version: 516, 6782, 5132, 7643 ---
 git checkout develop
+git -C ../Python-Instrumentation checkout element-516   # serialize_event armed -- 516's round2 plan
 DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile --build-arg PYTHON_VERSION=3.10 \
+    --build-context instrumentation=../Python-Instrumentation \
     -t clods-synapse:516 -t clods-synapse:6782 -t clods-synapse:5132 -t clods-synapse:7643 .
 
 # --- old version: 7516 ---
 git checkout bug10
+git -C ../Python-Instrumentation checkout element-7516   # check_valid_filter armed
 DOCKER_BUILDKIT=1 docker build -f docker/Dockerfile --build-arg PYTHON_VERSION=3.10 \
+    --build-context instrumentation=../Python-Instrumentation \
     -t clods-synapse:7516 .
 
 git checkout develop   # leave the checkout back on the branch other tooling in this repo expects
 ```
 
 One `docker build` with multiple `-t` flags produces one image with several tags — cheaper than
-building the same commit 4 times. `PYTHON_VERSION=3.10` is still worth pinning even though none of
-these bugs' `.properties` plans touch Python-Instrumentation the way `element-516`'s round2 does
-server-side — keeps every image on the version that instrumentation needs, in case that changes.
+building the same commit 4 times. `PYTHON_VERSION=3.10` and `--build-context instrumentation=...`
+matter for **all** these tags even though only `516` and `7516` actually use it at runtime (see
+§3) — Python-Instrumentation gets baked into every image (harmless, unused, same layer either
+way), so switching which bug is "the instrumented one" later never needs a rebuild, just a
+different `SYNAPSE_INSTRUMENT` value at `docker run` time. `--build-context` is a real Docker
+directory reference, not a git ref — whichever branch `../Python-Instrumentation` happens to have
+checked out on disk at build time is what gets baked in, hence the explicit checkout before each
+build above.
 
 Confirm:
 ```bash
@@ -56,13 +66,15 @@ docker images clods-synapse
 ## 3. Run a bug's image, exposing 8008
 
 `./run_bug.sh <bug>` automates this (stops whatever's running, starts the requested tag against
-the shared `./data/`, health-checks it) — `./run_bug.sh 516`, `./run_bug.sh stop`,
-`./run_bug.sh status`. Manually, that's:
+the shared `./data/`, sets `SYNAPSE_INSTRUMENT` automatically for `516`/`7516`, health-checks it)
+— `./run_bug.sh 516`, `./run_bug.sh stop`, `./run_bug.sh status`. Manually, that's:
 ```bash
 docker run -d --name clods-synapse-active \
     -p 127.0.0.1:8008:8008 \
     -v ~/clods/data:/data \
-    clods-synapse:516        # swap the tag for whichever bug
+    -e SYNAPSE_INSTRUMENT=/opt/python-instrumentation/driver.py \
+    clods-synapse:516        # swap the tag for whichever bug -- drop the -e for any bug other
+                              # than 516/7516, they don't have a server-side hook to run
 ```
 (`-v ~/clods/data:/data` — reuse the same `data/` dir `setup.sh` already generated a
 `homeserver.yaml`/signing key in, so you're not regenerating config per bug. If you want each bug
@@ -77,9 +89,9 @@ and re-run the `generate` step from `setup.sh` for that directory first.
 ## 4. Create user1 and user2
 
 ```bash
-docker exec clods-synapse register_new_matrix_user \
+docker exec clods-synapse-active register_new_matrix_user \
     -u user1 -p <password1> --no-admin -c /data/homeserver.yaml http://localhost:8008
-docker exec clods-synapse register_new_matrix_user \
+docker exec clods-synapse-active register_new_matrix_user \
     -u user2 -p <password2> --no-admin -c /data/homeserver.yaml http://localhost:8008
 ```
 (Non-interactive form — `-u`/`-p`/`--no-admin` skip the prompts. Uses `registration_shared_secret`

@@ -9,6 +9,10 @@
 # is NOT the same thing as build_and_test_all_bugs.sh, which spins up disposable
 # throwaway-config instances one at a time purely to smoke-test that each image starts.
 #
+# For 516/7516, also sets SYNAPSE_INSTRUMENT so the container runs through
+# Python-Instrumentation's driver.py instead of invoking synapse directly -- whichever plan was
+# armed in that checkout's constants/hooks.py when the image was built is what runs.
+#
 # Usage:
 #   ./run_bug.sh <bug>     # e.g. ./run_bug.sh 516 -- stops whatever's running, starts this one
 #   ./run_bug.sh stop      # stop, don't start anything else
@@ -19,6 +23,9 @@ cd "$(dirname "$0")"
 
 NAME="clods-synapse-active"
 VALID_BUGS=(516 6782 5132 7643 7516)
+# The only two bugs with a server-side Python-Instrumentation hook baked into their image
+# (see PER_BUG_BUILD_GUIDE.md §2) -- everyone else runs plain synapse.
+INSTRUMENTED_BUGS=(516 7516)
 
 case "${1:-}" in
     ""|-h|--help)
@@ -63,8 +70,17 @@ fi
 echo "== stopping whatever's currently running =="
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 
+RUN_ARGS=()
+for ib in "${INSTRUMENTED_BUGS[@]}"; do
+    if [ "$ib" = "$BUG" ]; then
+        RUN_ARGS+=(-e SYNAPSE_INSTRUMENT=/opt/python-instrumentation/driver.py)
+        echo "== $BUG has a server-side hook -- running through Python-Instrumentation's driver =="
+    fi
+done
+
 echo "== starting clods-synapse:$BUG =="
-docker run -d --name "$NAME" -p 127.0.0.1:8008:8008 -v "$(pwd)/data:/data" "clods-synapse:$BUG" >/dev/null
+docker run -d --name "$NAME" -p 127.0.0.1:8008:8008 -v "$(pwd)/data:/data" \
+    "${RUN_ARGS[@]}" "clods-synapse:$BUG" >/dev/null
 
 for i in $(seq 1 20); do
     if curl -fsS http://127.0.0.1:8008/health >/dev/null 2>&1; then

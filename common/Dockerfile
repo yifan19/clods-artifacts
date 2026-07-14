@@ -80,16 +80,17 @@ RUN sed -i 's/#\?PermitUserEnvironment.*/PermitUserEnvironment yes/' /etc/ssh/ss
 # inside the image; blameMasterInstrument.jar is kept alongside as a known-good fallback in case a
 # future source change breaks the build.
 COPY blameMasterInstrument.jar /opt/blameMasterInstrument.jar
-COPY bm_instrument-src /opt/bm_instrument-src
 
 # you can build your own bm_instrument
-#COPY m2-repo /opt/m2-repo
-#RUN cd /opt/bm_instrument-src && mvn -o -Dmaven.repo.local=/opt/m2-repo package -DskipTests
+# COPY bm_instrument-src /opt/bm_instrument-src
+# COPY m2-repo /opt/m2-repo
+# RUN cd /opt/bm_instrument-src && mvn -o -Dmaven.repo.local=/opt/m2-repo package -DskipTests
+# RUN chown -R ubuntu:ubuntu /opt/m2-repo /opt/bm_instrument-src 
 
 COPY lib /opt/lib
 COPY entrypoint.sh /opt/entrypoint.sh
 RUN chmod +x /opt/entrypoint.sh /opt/lib/*.sh \
-    && chown -R ubuntu:ubuntu /opt/blameMasterInstrument.jar /opt/bm_instrument-src /opt/m2-repo /opt/lib
+    && chown -R ubuntu:ubuntu /opt/blameMasterInstrument.jar /opt/lib
 
 EXPOSE 22
 ENTRYPOINT ["/opt/entrypoint.sh"]
